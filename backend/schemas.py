@@ -56,9 +56,9 @@ class CustomEvaluateRequest(BaseRequest):
     currency_mode: str = "KRW"
 
 class CustomEvaluateResponse(BaseModel):
-    expected_annual_return: float
-    annual_volatility: float
-    sharpe_ratio: float
+    usd_performance: ModePerformance
+    krw_performance: ModePerformance
+
 
 class YearlyStats(BaseModel):
     return_rate: float

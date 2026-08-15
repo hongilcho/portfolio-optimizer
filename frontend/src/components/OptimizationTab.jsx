@@ -355,12 +355,31 @@ export default function OptimizationTab({ session, setSession }) {
               </div>
 
               {customPerf && (
-                <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #fde68a' }}>
-                  <strong style={{ color: '#b45309', display: 'block', marginBottom: '0.4rem' }}>✏️ 사용자 지정 포트폴리오</strong>
-                  <div style={{ fontSize: '0.85rem', color: '#475569' }}>
-                    기대수익률: <strong>{(customPerf.expected_annual_return * 100).toFixed(2)}%</strong><br />
-                    변동성: <strong>{(customPerf.annual_volatility * 100).toFixed(2)}%</strong><br />
-                    샤프지수: <strong>{customPerf.sharpe_ratio.toFixed(2)}</strong>
+                <div style={{ background: '#fff', padding: '0.85rem', borderRadius: '8px', border: '2px solid #f59e0b', gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                    <strong style={{ color: '#b45309', fontSize: '0.95rem' }}>✏️ 사용자 지정 포트폴리오 (Custom Portfolio)</strong>
+                    <span style={{ fontSize: '0.75rem', color: '#b45309', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
+                      실시간 계산됨
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div style={{ background: '#eff6ff', padding: '0.6rem', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+                      <span style={{ color: '#1d4ed8', fontWeight: 'bold', fontSize: '0.85rem' }}>🇺🇸 USD 기준 (자산 본연 성향)</span>
+                      <div style={{ fontSize: '0.85rem', color: '#334155', marginTop: '0.3rem', lineHeight: '1.4' }}>
+                        기대수익률: <strong>{(customPerf.usd_performance.expected_annual_return * 100).toFixed(2)}%</strong><br />
+                        연간 변동성: <strong>{(customPerf.usd_performance.annual_volatility * 100).toFixed(2)}%</strong><br />
+                        샤프지수: <strong>{customPerf.usd_performance.sharpe_ratio.toFixed(2)}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#ecfdf5', padding: '0.6rem', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
+                      <span style={{ color: '#047857', fontWeight: 'bold', fontSize: '0.85rem' }}>🇰🇷 KRW 실전 기준 (환노출/헤지 체감)</span>
+                      <div style={{ fontSize: '0.85rem', color: '#334155', marginTop: '0.3rem', lineHeight: '1.4' }}>
+                        기대수익률: <strong>{(customPerf.krw_performance.expected_annual_return * 100).toFixed(2)}%</strong><br />
+                        연간 변동성: <strong>{(customPerf.krw_performance.annual_volatility * 100).toFixed(2)}%</strong><br />
+                        샤프지수: <strong>{customPerf.krw_performance.sharpe_ratio.toFixed(2)}</strong>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -370,6 +389,7 @@ export default function OptimizationTab({ session, setSession }) {
       </div>
     );
   };
+
 
   return (
     <div>

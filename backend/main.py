@@ -226,17 +226,26 @@ def evaluate_portfolio(request: schemas.CustomEvaluateRequest):
         if data_usd.empty:
             raise ValueError("No data found for the given tickers.")
             
-        eval_data = data_krw if request.currency_mode == "KRW" else data_usd
-        exp_return, annual_vol, sharpe = optimization_service.calculate_portfolio_performance(eval_data, request.weights)
+        usd_exp, usd_vol, usd_sharpe = optimization_service.calculate_portfolio_performance(data_usd, request.weights)
+        krw_exp, krw_vol, krw_sharpe = optimization_service.calculate_portfolio_performance(data_krw, request.weights)
+        
         return schemas.CustomEvaluateResponse(
-            expected_annual_return=exp_return,
-            annual_volatility=annual_vol,
-            sharpe_ratio=sharpe
+            usd_performance=schemas.ModePerformance(
+                expected_annual_return=usd_exp,
+                annual_volatility=usd_vol,
+                sharpe_ratio=usd_sharpe
+            ),
+            krw_performance=schemas.ModePerformance(
+                expected_annual_return=krw_exp,
+                annual_volatility=krw_vol,
+                sharpe_ratio=krw_sharpe
+            )
         )
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
+
 
 @app.get("/exchange_rate")
 def get_exchange_rate():
