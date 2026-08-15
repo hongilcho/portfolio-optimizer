@@ -25,8 +25,19 @@ export const updateSession = async (id, sessionData) => {
   return response.data;
 };
 
+export const deleteSession = async (id) => {
+  const response = await api.delete(`/sessions/${id}`);
+  return response.data;
+};
+
+
 export const getProxyRecommendations = async (ticker) => {
   const response = await api.get(`/proxy/recommendations?ticker=${ticker}`);
+  return response.data;
+};
+
+export const getExchangeRate = async () => {
+  const response = await api.get('/exchange_rate');
   return response.data;
 };
 
@@ -35,10 +46,17 @@ export const analyzeTickers = async (tickers, lookback_period, proxies = {}) => 
   return response.data;
 };
 
+
 export const optimizePortfolio = async (tickers, constraints, lookback_period, objective, proxies = {}) => {
   const response = await api.post('/optimize', { tickers, constraints, lookback_period, objective, proxies });
   return response.data;
 };
+
+export const evaluatePortfolio = async (tickers, weights, lookback_period, proxies = {}) => {
+  const response = await api.post('/evaluate_portfolio', { tickers, weights, lookback_period, proxies });
+  return response.data;
+};
+
 
 export const runBacktest = async (tickers, weights, lookback_period, params, proxies = {}) => {
   const response = await api.post('/backtest', {

@@ -58,6 +58,36 @@ function App() {
     }
   }
 
+  const handleDeleteSession = async (sessionId, sessionName) => {
+    if (!window.confirm(`Are you sure you want to delete session "${sessionName || 'Selected Session'}"?`)) return;
+    try {
+      await api.deleteSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      if (currentSession && currentSession.id === sessionId) {
+        setCurrentSession(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete session", err);
+      alert("Failed to delete session.");
+    }
+  }
+
+  const handleRenameSession = async (session) => {
+    const newName = prompt("Enter new session name:", session.name);
+    if (!newName || newName.trim() === '' || newName.trim() === session.name) return;
+    const updatedSession = { ...session, name: newName.trim() };
+    try {
+      const updated = await api.updateSession(session.id, updatedSession);
+      setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+      if (currentSession && currentSession.id === session.id) {
+        setCurrentSession(updated);
+      }
+    } catch (err) {
+      console.error("Failed to rename session", err);
+      alert("Failed to rename session.");
+    }
+  }
+
   return (
     <div className="container">
       <div className="header">
@@ -74,12 +104,33 @@ function App() {
           {sessions.length === 0 ? (
             <p>No sessions found. Create a new one to get started.</p>
           ) : (
-            <ul>
+            <ul style={{ listStyle: 'none', padding: 0 }}>
               {sessions.map(session => (
-                <li key={session.id} style={{marginBottom: '8px'}}>
-                  <button className="btn" style={{background: 'transparent', color: 'var(--primary-color)', border: '1px solid var(--primary-color)'}} onClick={() => { setCurrentSession(session); setActiveTab('analysis'); }}>
-                    {session.name}
-                  </button>
+                <li key={session.id} style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '6px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontWeight: '600', color: '#1e293b', fontSize: '1.05rem' }}>{session.name}</span>
+                  <div>
+                    <button 
+                      className="btn" 
+                      style={{ background: 'var(--primary-color)', color: '#fff', marginRight: '8px', padding: '6px 14px' }} 
+                      onClick={() => { setCurrentSession(session); setActiveTab('analysis'); }}
+                    >
+                      Open
+                    </button>
+                    <button 
+                      className="btn" 
+                      style={{ background: '#3b82f6', color: '#fff', marginRight: '8px', padding: '6px 14px' }} 
+                      onClick={() => handleRenameSession(session)}
+                    >
+                      Rename
+                    </button>
+                    <button 
+                      className="btn" 
+                      style={{ background: '#ef4444', color: '#fff', padding: '6px 14px' }} 
+                      onClick={() => handleDeleteSession(session.id, session.name)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -89,8 +140,25 @@ function App() {
         <div>
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
             <h2>Session: {currentSession.name}</h2>
-            <button className="btn" style={{background: '#64748b'}} onClick={() => setCurrentSession(null)}>Back to Sessions</button>
+            <div>
+              <button 
+                className="btn" 
+                style={{background: '#3b82f6', color: '#fff', marginRight: '8px'}} 
+                onClick={() => handleRenameSession(currentSession)}
+              >
+                Rename Session
+              </button>
+              <button 
+                className="btn" 
+                style={{background: '#ef4444', color: '#fff', marginRight: '8px'}} 
+                onClick={() => handleDeleteSession(currentSession.id, currentSession.name)}
+              >
+                Delete Session
+              </button>
+              <button className="btn" style={{background: '#64748b'}} onClick={() => setCurrentSession(null)}>Back to Sessions</button>
+            </div>
           </div>
+
           
           <div className="tabs" style={{display: 'flex', gap: '1rem', borderBottom: '2px solid #e2e8f0', marginBottom: '2rem'}}>
             <button 
@@ -117,24 +185,25 @@ function App() {
           </div>
 
           <div>
-            {activeTab === 'analysis' && (
+            <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
               <AnalysisTab 
                 session={currentSession} 
                 setSession={setCurrentSession} 
+                onDeleteSession={handleDeleteSession}
               />
-            )}
-            {activeTab === 'optimization' && (
+            </div>
+            <div style={{ display: activeTab === 'optimization' ? 'block' : 'none' }}>
               <OptimizationTab 
                 session={currentSession} 
                 setSession={setCurrentSession} 
               />
-            )}
-            {activeTab === 'backtest' && (
+            </div>
+            <div style={{ display: activeTab === 'backtest' ? 'block' : 'none' }}>
               <BacktestTab 
                 session={currentSession} 
                 setSession={setCurrentSession} 
               />
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -143,3 +212,4 @@ function App() {
 }
 
 export default App
+

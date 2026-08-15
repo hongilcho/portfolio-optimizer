@@ -1,8 +1,11 @@
 fastapi==0.110.0
 uvicorn==0.27.1
-yfinance==0.2.37
+yfinance>=1.6.0
 pandas==2.2.1
 numpy==1.26.4
 PyPortfolioOpt==1.5.5
 sqlalchemy==2.0.28
 pydantic==2.6.3
+scikit-learn
+
+

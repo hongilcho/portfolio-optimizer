@@ -105,8 +105,18 @@ def update_session(session_id: int, session: schemas.SessionUpdate, db: Session 
         updated_at=s.updated_at
     )
 
+@app.delete("/sessions/{session_id}")
+def delete_session(session_id: int, db: Session = Depends(get_db)):
+    s = db.query(models.PortfolioSession).filter(models.PortfolioSession.id == session_id).first()
+    if s is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    db.delete(s)
+    db.commit()
+    return {"message": "Session deleted"}
+
 @app.get("/proxy/recommendations")
 def get_proxy_recommendations(ticker: str):
+
     recs = finance_service.get_proxy_recommendations(ticker)
     return {"ticker": ticker, "recommendations": recs}
 
@@ -153,7 +163,7 @@ def optimize(request: schemas.OptimizationRequest):
             
         # Drop dates for optimization
         # optimization_service uses data directly
-        weights, exp_return, annual_vol, sharpe = optimization_service.optimize_portfolio(
+        weights, exp_return, annual_vol, sharpe, _ = optimization_service.optimize_portfolio(
             data, request.constraints, request.objective
         )
         return schemas.OptimizationResponse(
@@ -167,25 +177,58 @@ def optimize(request: schemas.OptimizationRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Optimization failed: {str(e)}")
 
-@app.post("/backtest", response_model=schemas.BacktestResponse)
-def backtest(request: schemas.BacktestParams):
+@app.post("/evaluate_portfolio", response_model=schemas.CustomEvaluateResponse)
+def evaluate_portfolio(request: schemas.CustomEvaluateRequest):
     try:
         data = finance_service.fetch_historical_data(request.tickers, period=request.lookback_period, proxies=request.proxies)
         if data.empty:
             raise ValueError("No data found for the given tickers.")
             
-        dates, port_vals, bench_vals, returns, roll_vol = backtest_service.run_backtest(
+        exp_return, annual_vol, sharpe = optimization_service.calculate_portfolio_performance(data, request.weights)
+        return schemas.CustomEvaluateResponse(
+            expected_annual_return=exp_return,
+            annual_volatility=annual_vol,
+            sharpe_ratio=sharpe
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
+
+
+@app.get("/exchange_rate")
+def get_exchange_rate():
+    rate = finance_service.get_usd_krw_rate()
+    return {"usd_krw": rate}
+
+@app.post("/backtest", response_model=schemas.BacktestResponse)
+def backtest(request: schemas.BacktestParams):
+    try:
+        # Fetch portfolio tickers plus SPY for S&P 500 benchmark
+        all_tickers = list(set(request.tickers + ["SPY"]))
+        data = finance_service.fetch_historical_data(all_tickers, period=request.lookback_period, proxies=request.proxies)
+        if data.empty:
+            raise ValueError("No data found for the given tickers.")
+            
+        rate = request.exchange_rate or finance_service.get_usd_krw_rate()
+        
+        dates, port_vals, bench_vals, spy_vals, returns, roll_vol = backtest_service.run_backtest(
             data, request.weights, request.initial_capital, request.dca_amount, 
-            request.rebalance_frequency, request.rebalance_threshold
+            request.rebalance_frequency, request.rebalance_threshold,
+            currency=request.currency, exchange_rate=rate
         )
         return schemas.BacktestResponse(
             dates=dates,
             portfolio_values=port_vals,
             benchmark_values=bench_vals,
+            spy_values=spy_vals,
             returns=returns,
-            rolling_volatility=roll_vol
+            rolling_volatility=roll_vol,
+            currency=request.currency,
+            exchange_rate=rate
         )
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
+

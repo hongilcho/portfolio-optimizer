@@ -35,6 +35,15 @@ class OptimizationResponse(BaseModel):
     annual_volatility: float
     sharpe_ratio: float
 
+class CustomEvaluateRequest(BaseRequest):
+    weights: Dict[str, float]
+
+class CustomEvaluateResponse(BaseModel):
+    expected_annual_return: float
+    annual_volatility: float
+    sharpe_ratio: float
+
+
 class YearlyStats(BaseModel):
     return_rate: float
     volatility: float
@@ -56,14 +65,20 @@ class AnalyzeResponse(BaseModel):
 
 class BacktestParams(BaseRequest):
     weights: Dict[str, float]
-    initial_capital: float = 10000.0
+    initial_capital: float = 10000000.0
     dca_amount: float = 0.0
     rebalance_frequency: str = "monthly"
     rebalance_threshold: float = 0.05
+    currency: str = "KRW"
+    exchange_rate: Optional[float] = None
 
 class BacktestResponse(BaseModel):
     dates: List[str]
     portfolio_values: List[float]
     benchmark_values: List[float]
+    spy_values: List[float]
     returns: List[float]
     rolling_volatility: List[float]
+    currency: str = "KRW"
+    exchange_rate: float = 1400.0
+

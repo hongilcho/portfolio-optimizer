@@ -3,6 +3,19 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Any
 
+def get_usd_krw_rate() -> float:
+    """
+    Fetch the latest USD/KRW exchange rate.
+    """
+    try:
+        data = yf.Ticker("USDKRW=X").history(period="5d")
+        if not data.empty and "Close" in data:
+            rate = float(data["Close"].dropna().iloc[-1])
+            return round(rate, 2)
+    except Exception as e:
+        print(f"Error fetching USD/KRW: {e}")
+    return 1400.0
+
 def get_ticker_info(ticker: str) -> Dict[str, Any]:
     try:
         info = yf.Ticker(ticker).info
@@ -14,6 +27,7 @@ def get_ticker_info(ticker: str) -> Dict[str, Any]:
         }
     except Exception:
         return {}
+
 
 def get_proxy_recommendations(ticker: str) -> List[Dict[str, str]]:
     """
