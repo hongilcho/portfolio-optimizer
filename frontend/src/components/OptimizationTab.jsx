@@ -188,12 +188,20 @@ export default function OptimizationTab({ session, setSession }) {
     const totalSumPercent = (Object.values(editableWeights).reduce((a, b) => a + b, 0) * 100).toFixed(1);
 
     return (
-      <div style={{ marginTop: '2rem' }}>
+      <div style={{ marginTop: '2rem', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         {/* Dual Pie Charts Comparison */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <h4 style={{ margin: 0, color: '#1d4ed8' }}>🇺🇸 USD Mode (자산 펀더멘털 기준)</h4>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', 
+          gap: '1rem', 
+          marginBottom: '1.5rem',
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box'
+        }}>
+          <div className="card" style={{ minWidth: 0, overflow: 'hidden', margin: 0, boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.25rem' }}>
+              <h4 style={{ margin: 0, color: '#1d4ed8', fontSize: '0.95rem' }}>🇺🇸 USD Mode (자산 펀더멘털 기준)</h4>
               <button 
                 type="button" 
                 onClick={() => handleApplyPreset('USD')}
@@ -202,24 +210,26 @@ export default function OptimizationTab({ session, setSession }) {
                 이 비중 적용
               </button>
             </div>
-            <Plot
-              data={[{
-                labels: Object.keys(usdMode.weights).filter(k => usdMode.weights[k] > 0.001),
-                values: Object.keys(usdMode.weights).filter(k => usdMode.weights[k] > 0.001).map(k => usdMode.weights[k]),
-                type: 'pie',
-                hole: 0.4,
-                textinfo: 'label+percent',
-                marker: { colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'] }
-              }]}
-              layout={{ autosize: true, margin: { l: 20, r: 20, t: 20, b: 20 }, showlegend: false }}
-              useResizeHandler={true}
-              style={{ width: "100%", height: "240px" }}
-            />
+            <div style={{ width: '100%', minWidth: 0, height: '240px', overflow: 'hidden' }}>
+              <Plot
+                data={[{
+                  labels: Object.keys(usdMode.weights).filter(k => usdMode.weights[k] > 0.001),
+                  values: Object.keys(usdMode.weights).filter(k => usdMode.weights[k] > 0.001).map(k => usdMode.weights[k]),
+                  type: 'pie',
+                  hole: 0.4,
+                  textinfo: 'label+percent',
+                  marker: { colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'] }
+                }]}
+                layout={{ autosize: true, margin: { l: 15, r: 15, t: 15, b: 15 }, showlegend: false }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
           </div>
 
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <h4 style={{ margin: 0, color: '#047857' }}>🇰🇷 KRW Mode (원화 환노출/헤지 기준)</h4>
+          <div className="card" style={{ minWidth: 0, overflow: 'hidden', margin: 0, boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.25rem' }}>
+              <h4 style={{ margin: 0, color: '#047857', fontSize: '0.95rem' }}>🇰🇷 KRW Mode (원화 환노출/헤지 기준)</h4>
               <button 
                 type="button" 
                 onClick={() => handleApplyPreset('KRW')}
@@ -228,21 +238,24 @@ export default function OptimizationTab({ session, setSession }) {
                 이 비중 적용
               </button>
             </div>
-            <Plot
-              data={[{
-                labels: Object.keys(krwMode.weights).filter(k => krwMode.weights[k] > 0.001),
-                values: Object.keys(krwMode.weights).filter(k => krwMode.weights[k] > 0.001).map(k => krwMode.weights[k]),
-                type: 'pie',
-                hole: 0.4,
-                textinfo: 'label+percent',
-                marker: { colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'] }
-              }]}
-              layout={{ autosize: true, margin: { l: 20, r: 20, t: 20, b: 20 }, showlegend: false }}
-              useResizeHandler={true}
-              style={{ width: "100%", height: "240px" }}
-            />
+            <div style={{ width: '100%', minWidth: 0, height: '240px', overflow: 'hidden' }}>
+              <Plot
+                data={[{
+                  labels: Object.keys(krwMode.weights).filter(k => krwMode.weights[k] > 0.001),
+                  values: Object.keys(krwMode.weights).filter(k => krwMode.weights[k] > 0.001).map(k => krwMode.weights[k]),
+                  type: 'pie',
+                  hole: 0.4,
+                  textinfo: 'label+percent',
+                  marker: { colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'] }
+                }]}
+                layout={{ autosize: true, margin: { l: 15, r: 15, t: 15, b: 15 }, showlegend: false }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
           </div>
         </div>
+
 
         {/* Side-by-Side Weights & Performance Comparison Table */}
         <div className="card">
@@ -392,9 +405,10 @@ export default function OptimizationTab({ session, setSession }) {
 
 
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+    <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1rem', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         <OptimizationSettings 
+
           tickers={session.tickers}
           constraints={session.constraints}
           setConstraints={(newConstraints) => setSession({...session, constraints: newConstraints})}
