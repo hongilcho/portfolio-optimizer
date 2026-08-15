@@ -356,6 +356,8 @@ export default function BacktestTab({ session, setSession }) {
       }));
     };
 
+    const userCustomWeights = session.constraints?.user_edited_weights || (session.constraints?.is_custom_mode ? session.constraints?.custom_weights : null);
+
     return (
       <div className="card" style={{ marginBottom: '1.5rem', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
@@ -386,6 +388,15 @@ export default function BacktestTab({ session, setSession }) {
                 🇰🇷 KRW 최적 비중
               </button>
             )}
+            {userCustomWeights && (
+              <button
+                type="button"
+                onClick={() => applyWeightsPreset(userCustomWeights, true)}
+                style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#fffbeb', border: '1px solid #fde68a', color: '#b45309', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+              >
+                ✏️ 사용자 직접 편집 비중
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -399,6 +410,7 @@ export default function BacktestTab({ session, setSession }) {
             </button>
           </div>
         </div>
+
 
         {/* Ticker Badges Grid */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>

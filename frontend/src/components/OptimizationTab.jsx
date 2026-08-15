@@ -21,10 +21,18 @@ export default function OptimizationTab({ session, setSession }) {
     if (session.constraints?.opt_base) {
       setOptBase(session.constraints.opt_base);
     }
-    if (session.constraints?.custom_weights) {
-      setEditableWeights(session.constraints.custom_weights);
+    const savedWeights = session.constraints?.custom_weights || session.constraints?.user_edited_weights;
+    if (savedWeights) {
+      setEditableWeights(savedWeights);
+      setIsCustomMode(!!session.constraints.is_custom_mode);
+      if (session.tickers?.length > 0) {
+        api.evaluatePortfolio(
+          session.tickers, savedWeights, session.constraints.lookback_period || '5y', session.constraints.proxies || {}, session.constraints.hedged_tickers || [], 'KRW'
+        ).then(res => setCustomPerf(res)).catch(e => console.error(e));
+      }
     }
   }, [session.id]);
+
 
   const lookback = session.constraints.lookback_period || '5y';
   const objective = session.constraints.objective || 'max_sharpe';
@@ -129,6 +137,7 @@ export default function OptimizationTab({ session, setSession }) {
         constraints: {
           ...prev.constraints,
           custom_weights: updatedWeights,
+          user_edited_weights: updatedWeights,
           is_custom_mode: true
         }
       }));
@@ -161,9 +170,11 @@ export default function OptimizationTab({ session, setSession }) {
         constraints: {
           ...prev.constraints,
           custom_weights: normalized,
+          user_edited_weights: normalized,
           is_custom_mode: true
         }
       }));
+
     } catch (err) {
       console.error(err);
     } finally {
