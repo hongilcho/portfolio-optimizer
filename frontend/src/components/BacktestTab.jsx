@@ -56,20 +56,21 @@ export default function BacktestTab({ session, setSession }) {
     }
   };
 
-  const lookback = session.constraints.lookback_period || '5y';
+  const lookback = session.constraints?.lookback_period || '5y';
 
   const handleRunBacktest = async () => {
-    if (session.tickers.length === 0) return alert("Please add tickers in Data & Analysis tab first.");
+    if (!session.tickers || session.tickers.length === 0) return alert("Please add tickers in Data & Analysis tab first.");
     setLoading(true);
     try {
       let targetWeights = session.constraints?.custom_weights || session.constraints?.opt_result?.weights;
       
       if (!targetWeights) {
         const optResult = await api.optimizePortfolio(
-          session.tickers, session.constraints, lookback, session.constraints.objective || 'max_sharpe', session.constraints.proxies || {}
+          session.tickers, session.constraints || {}, lookback, session.constraints?.objective || 'max_sharpe', session.constraints?.proxies || {}
         );
         targetWeights = optResult.weights;
       }
+
       
       const payload = {
         ...params,
@@ -326,14 +327,14 @@ export default function BacktestTab({ session, setSession }) {
     const appliedWeights = session.constraints?.custom_weights || session.constraints?.opt_result?.weights || {};
     const dualRes = session.constraints?.opt_dual_result;
     const hedgedTickers = session.constraints?.hedged_tickers || [];
-    const tickers = session.tickers;
+    const tickers = session.tickers || [];
 
     if (tickers.length === 0) return null;
 
-    const isUsdSelected = dualRes && !session.constraints?.is_custom_mode && Object.keys(dualRes.usd_mode.weights).every(
+    const isUsdSelected = !!dualRes?.usd_mode?.weights && !session.constraints?.is_custom_mode && Object.keys(dualRes.usd_mode.weights).every(
       t => Math.abs((dualRes.usd_mode.weights[t] || 0) - (appliedWeights[t] || 0)) < 0.001
     );
-    const isKrwSelected = dualRes && !session.constraints?.is_custom_mode && Object.keys(dualRes.krw_mode.weights).every(
+    const isKrwSelected = !!dualRes?.krw_mode?.weights && !session.constraints?.is_custom_mode && Object.keys(dualRes.krw_mode.weights).every(
       t => Math.abs((dualRes.krw_mode.weights[t] || 0) - (appliedWeights[t] || 0)) < 0.001
     );
     const isEqSelected = tickers.length > 0 && Object.keys(appliedWeights).length > 0 && tickers.every(
@@ -341,6 +342,7 @@ export default function BacktestTab({ session, setSession }) {
     );
     const isCustomSelected = !!session.constraints?.is_custom_mode && !isEqSelected;
 
+    let weightSourceLabel = '✏️ 사용자 지정 / 현재 비중';
     if (isCustomSelected) {
       weightSourceLabel = '✏️ 사용자 직접 편집 비중';
     } else if (isUsdSelected) {
@@ -366,8 +368,9 @@ export default function BacktestTab({ session, setSession }) {
     // User custom weights fallback chain to guarantee it is always available
     const userCustomWeights = session.constraints?.user_edited_weights 
       || session.constraints?.custom_weights 
-      || (dualRes ? dualRes.usd_mode.weights : null)
+      || (dualRes?.usd_mode?.weights ? dualRes.usd_mode.weights : null)
       || {};
+
 
     return (
       <div className="card" style={{ marginBottom: '1.5rem', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1' }}>

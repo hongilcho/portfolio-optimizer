@@ -15,7 +15,7 @@ export default function OptimizationTab({ session, setSession }) {
   const [customPerf, setCustomPerf] = useState(null);
 
   useEffect(() => {
-    if (session.constraints?.opt_dual_result) {
+    if (session.constraints?.opt_dual_result?.usd_mode && session.constraints?.opt_dual_result?.krw_mode) {
       setDualResult(session.constraints.opt_dual_result);
     }
     if (session.constraints?.opt_base) {
@@ -24,20 +24,20 @@ export default function OptimizationTab({ session, setSession }) {
     const savedWeights = session.constraints?.custom_weights || session.constraints?.user_edited_weights;
     if (savedWeights) {
       setEditableWeights(savedWeights);
-      setIsCustomMode(!!session.constraints.is_custom_mode);
+      setIsCustomMode(!!session.constraints?.is_custom_mode);
       if (session.tickers?.length > 0) {
         api.evaluatePortfolio(
-          session.tickers, savedWeights, session.constraints.lookback_period || '5y', session.constraints.proxies || {}, session.constraints.hedged_tickers || [], 'KRW'
+          session.tickers, savedWeights, session.constraints?.lookback_period || '5y', session.constraints?.proxies || {}, session.constraints?.hedged_tickers || [], 'KRW'
         ).then(res => setCustomPerf(res)).catch(e => console.error(e));
       }
     }
   }, [session.id]);
 
+  const lookback = session.constraints?.lookback_period || '5y';
+  const objective = session.constraints?.objective || 'max_sharpe';
+  const hedgedTickers = session.constraints?.hedged_tickers || [];
+  const proxies = session.constraints?.proxies || {};
 
-  const lookback = session.constraints.lookback_period || '5y';
-  const objective = session.constraints.objective || 'max_sharpe';
-  const hedgedTickers = session.constraints.hedged_tickers || [];
-  const proxies = session.constraints.proxies || {};
 
   const handleOptimize = async () => {
     if (session.tickers.length === 0) return alert("Please add tickers first in the Data & Analysis tab.");
@@ -190,11 +190,11 @@ export default function OptimizationTab({ session, setSession }) {
   };
 
   const renderComparisonSection = () => {
-    if (!dualResult) return null;
-    const tickers = session.tickers;
+    if (!dualResult || !dualResult.usd_mode?.weights || !dualResult.krw_mode?.weights) return null;
+    const tickers = session.tickers || [];
     const usdMode = dualResult.usd_mode;
     const krwMode = dualResult.krw_mode;
-    const deltas = dualResult.weight_deltas;
+    const deltas = dualResult.weight_deltas || {};
 
     const totalSumPercent = (Object.values(editableWeights).reduce((a, b) => a + b, 0) * 100).toFixed(1);
 
@@ -224,8 +224,8 @@ export default function OptimizationTab({ session, setSession }) {
             <div style={{ width: '100%', minWidth: 0, height: '240px', overflow: 'hidden' }}>
               <Plot
                 data={[{
-                  labels: Object.keys(usdMode.weights).filter(k => usdMode.weights[k] > 0.001),
-                  values: Object.keys(usdMode.weights).filter(k => usdMode.weights[k] > 0.001).map(k => usdMode.weights[k]),
+                  labels: Object.keys(usdMode.weights || {}).filter(k => (usdMode.weights[k] || 0) > 0.001),
+                  values: Object.keys(usdMode.weights || {}).filter(k => (usdMode.weights[k] || 0) > 0.001).map(k => usdMode.weights[k]),
                   type: 'pie',
                   hole: 0.4,
                   textinfo: 'label+percent',
@@ -252,8 +252,8 @@ export default function OptimizationTab({ session, setSession }) {
             <div style={{ width: '100%', minWidth: 0, height: '240px', overflow: 'hidden' }}>
               <Plot
                 data={[{
-                  labels: Object.keys(krwMode.weights).filter(k => krwMode.weights[k] > 0.001),
-                  values: Object.keys(krwMode.weights).filter(k => krwMode.weights[k] > 0.001).map(k => krwMode.weights[k]),
+                  labels: Object.keys(krwMode.weights || {}).filter(k => (krwMode.weights[k] || 0) > 0.001),
+                  values: Object.keys(krwMode.weights || {}).filter(k => (krwMode.weights[k] || 0) > 0.001).map(k => krwMode.weights[k]),
                   type: 'pie',
                   hole: 0.4,
                   textinfo: 'label+percent',
@@ -284,101 +284,121 @@ export default function OptimizationTab({ session, setSession }) {
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left', backgroundColor: '#f8fafc' }}>
-                  <th style={{ padding: '0.6rem' }}>Ticker</th>
-                  <th style={{ padding: '0.6rem' }}>환구분</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'right' }}>🇺🇸 USD 최적 비중</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'right' }}>🇰🇷 KRW 최적 비중</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'right' }}>차이 (Δ KRW-USD)</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'right' }}>✏️ 현재/임의 비중 (%)</th>
+                <tr style={{ borderBottom: '2px solid #cbd5e1', backgroundColor: '#f8fafc' }}>
+                  <th style={{ padding: '10px 12px' }}>종목 (Ticker)</th>
+                  <th style={{ padding: '10px 12px' }}>환구분</th>
+                  <th style={{ padding: '10px 12px', color: '#1d4ed8' }}>🇺🇸 USD 최적 비중</th>
+                  <th style={{ padding: '10px 12px', color: '#047857' }}>🇰🇷 KRW 최적 비중</th>
+                  <th style={{ padding: '10px 12px' }}>비중 차이 (KRW - USD)</th>
+                  <th style={{ padding: '10px 12px', color: '#b45309' }}>✏️ 사용자 임의 비중 (%)</th>
                 </tr>
               </thead>
               <tbody>
-                {tickers.map(t => {
-                  const isHedged = hedgedTickers.includes(t);
-                  const wUsd = (usdMode.weights[t] || 0) * 100;
-                  const wKrw = (krwMode.weights[t] || 0) * 100;
-                  const delta = (deltas[t] || 0) * 100;
-                  const curW = (editableWeights[t] || 0) * 100;
+                {tickers.map(ticker => {
+                  const usdW = usdMode.weights?.[ticker] || 0;
+                  const krwW = krwMode.weights?.[ticker] || 0;
+                  const delta = deltas[ticker] !== undefined ? deltas[ticker] : (krwW - usdW);
+                  const isHedged = hedgedTickers.includes(ticker);
+                  const editVal = editableWeights[ticker] !== undefined ? (editableWeights[ticker] * 100).toFixed(1) : (usdW * 100).toFixed(1);
 
                   return (
-                    <tr key={t} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '0.6rem', fontWeight: 'bold' }}>{t}</td>
-                      <td style={{ padding: '0.6rem' }}>
+                    <tr key={ticker} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 'bold' }}>{ticker}</td>
+                      <td style={{ padding: '10px 12px' }}>
                         <span style={{
                           fontSize: '0.75rem',
                           padding: '2px 6px',
-                          borderRadius: '10px',
+                          borderRadius: '4px',
                           background: isHedged ? '#ecfdf5' : '#f1f5f9',
-                          color: isHedged ? '#047857' : '#475569'
+                          color: isHedged ? '#047857' : '#64748b',
+                          fontWeight: '600'
                         }}>
-                          {isHedged ? '🛡️ (H)' : '🌐 환노출'}
+                          {isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출'}
                         </span>
                       </td>
-                      <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: '600', color: '#1d4ed8' }}>
-                        {wUsd.toFixed(1)}%
+                      <td style={{ padding: '10px 12px', fontWeight: '600', color: '#1d4ed8' }}>
+                        {(usdW * 100).toFixed(1)}%
                       </td>
-                      <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: '600', color: '#047857' }}>
-                        {wKrw.toFixed(1)}%
+                      <td style={{ padding: '10px 12px', fontWeight: '600', color: '#047857' }}>
+                        {(krwW * 100).toFixed(1)}%
                       </td>
-                      <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: delta > 0 ? '#10b981' : (delta < 0 ? '#ef4444' : '#64748b') }}>
-                        {delta > 0 ? `+${delta.toFixed(1)}%` : `${delta.toFixed(1)}%`}
+                      <td style={{ 
+                        padding: '10px 12px', 
+                        fontWeight: 'bold', 
+                        color: delta > 0.005 ? '#047857' : delta < -0.005 ? '#ef4444' : '#64748b' 
+                      }}>
+                        {delta > 0 ? `+${(delta * 100).toFixed(1)}%` : `${(delta * 100).toFixed(1)}%`}
                       </td>
-                      <td style={{ padding: '0.6rem', textAlign: 'right' }}>
-                        <input 
-                          className="input"
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          max="100"
-                          style={{ width: '80px', textAlign: 'right', padding: '3px 6px', fontWeight: 'bold' }}
-                          value={Math.round(curW * 100) / 100}
-                          onChange={e => handleWeightChange(t, e.target.value)}
-                        /> %
+                      <td style={{ padding: '6px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            value={editVal}
+                            onChange={(e) => handleWeightChange(ticker, e.target.value)}
+                            style={{
+                              width: '80px',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #f59e0b',
+                              fontSize: '0.9rem',
+                              fontWeight: '600',
+                              backgroundColor: '#fffbeb'
+                            }}
+                          />
+                          <span style={{ fontSize: '0.85rem', color: '#64748b' }}>%</span>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
-              </tbody>
-              <tfoot>
-                <tr style={{ borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
-                  <td style={{ padding: '0.6rem' }} colSpan={2}>합계 (Total)</td>
-                  <td style={{ padding: '0.6rem', textAlign: 'right', color: '#1d4ed8' }}>100.0%</td>
-                  <td style={{ padding: '0.6rem', textAlign: 'right', color: '#047857' }}>100.0%</td>
-                  <td style={{ padding: '0.6rem', textAlign: 'right' }}>0.0%</td>
-                  <td style={{ padding: '0.6rem', textAlign: 'right', color: Math.abs(totalSumPercent - 100.0) < 0.1 ? '#10b981' : '#ef4444' }}>
-                    {totalSumPercent}%
+                <tr style={{ backgroundColor: '#f8fafc', fontWeight: 'bold' }}>
+                  <td style={{ padding: '10px 12px' }} colSpan="2">합계 (Total)</td>
+                  <td style={{ padding: '10px 12px', color: '#1d4ed8' }}>100.0%</td>
+                  <td style={{ padding: '10px 12px', color: '#047857' }}>100.0%</td>
+                  <td style={{ padding: '10px 12px' }}>-</td>
+                  <td style={{ 
+                    padding: '10px 12px', 
+                    color: Math.abs(parseFloat(totalSumPercent) - 100) < 0.2 ? '#047857' : '#ef4444' 
+                  }}>
+                    {totalSumPercent}% {Math.abs(parseFloat(totalSumPercent) - 100) >= 0.2 && '(정규화 권장)'}
                   </td>
                 </tr>
-              </tfoot>
+              </tbody>
             </table>
           </div>
 
-          {/* Performance Comparison Summary */}
+          {/* Expected Performance Cards Comparison */}
           <div style={{ marginTop: '1.5rem', backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
             <h4 style={{ margin: '0 0 0.75rem 0' }}>예상 성과 지표 비교 (Expected Performance)</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-              <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
-                <strong style={{ color: '#1d4ed8', display: 'block', marginBottom: '0.4rem' }}>🇺🇸 USD Mode 포트폴리오</strong>
-                <div style={{ fontSize: '0.85rem', color: '#475569' }}>
-                  기대수익률: <strong>{(usdMode.usd_performance.expected_annual_return * 100).toFixed(2)}%</strong><br />
-                  변동성: <strong>{(usdMode.usd_performance.annual_volatility * 100).toFixed(2)}%</strong><br />
-                  샤프지수: <strong>{usdMode.usd_performance.sharpe_ratio.toFixed(2)}</strong>
+              {usdMode?.usd_performance && (
+                <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+                  <strong style={{ color: '#1d4ed8', display: 'block', marginBottom: '0.4rem' }}>🇺🇸 USD Mode 포트폴리오</strong>
+                  <div style={{ fontSize: '0.85rem', color: '#475569' }}>
+                    기대수익률: <strong>{((usdMode.usd_performance.expected_annual_return || 0) * 100).toFixed(2)}%</strong><br />
+                    변동성: <strong>{((usdMode.usd_performance.annual_volatility || 0) * 100).toFixed(2)}%</strong><br />
+                    샤프지수: <strong>{(usdMode.usd_performance.sharpe_ratio || 0).toFixed(2)}</strong>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
-                <strong style={{ color: '#047857', display: 'block', marginBottom: '0.4rem' }}>🇰🇷 KRW Mode 포트폴리오</strong>
-                <div style={{ fontSize: '0.85rem', color: '#475569' }}>
-                  기대수익률: <strong>{(krwMode.krw_performance.expected_annual_return * 100).toFixed(2)}%</strong><br />
-                  변동성: <strong>{(krwMode.krw_performance.annual_volatility * 100).toFixed(2)}%</strong><br />
-                  샤프지수: <strong>{krwMode.krw_performance.sharpe_ratio.toFixed(2)}</strong>
+              {krwMode?.krw_performance && (
+                <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
+                  <strong style={{ color: '#047857', display: 'block', marginBottom: '0.4rem' }}>🇰🇷 KRW Mode 포트폴리오</strong>
+                  <div style={{ fontSize: '0.85rem', color: '#475569' }}>
+                    기대수익률: <strong>{((krwMode.krw_performance.expected_annual_return || 0) * 100).toFixed(2)}%</strong><br />
+                    변동성: <strong>{((krwMode.krw_performance.annual_volatility || 0) * 100).toFixed(2)}%</strong><br />
+                    샤프지수: <strong>{(krwMode.krw_performance.sharpe_ratio || 0).toFixed(2)}</strong>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {customPerf && (
+              {customPerf && customPerf.usd_performance && customPerf.krw_performance && (
                 <div style={{ background: '#fff', padding: '0.85rem', borderRadius: '8px', border: '2px solid #f59e0b', gridColumn: '1 / -1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
                     <strong style={{ color: '#b45309', fontSize: '0.95rem' }}>✏️ 사용자 지정 포트폴리오 (Custom Portfolio)</strong>
@@ -390,18 +410,18 @@ export default function OptimizationTab({ session, setSession }) {
                     <div style={{ background: '#eff6ff', padding: '0.6rem', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
                       <span style={{ color: '#1d4ed8', fontWeight: 'bold', fontSize: '0.85rem' }}>🇺🇸 USD 기준 (자산 본연 성향)</span>
                       <div style={{ fontSize: '0.85rem', color: '#334155', marginTop: '0.3rem', lineHeight: '1.4' }}>
-                        기대수익률: <strong>{(customPerf.usd_performance.expected_annual_return * 100).toFixed(2)}%</strong><br />
-                        연간 변동성: <strong>{(customPerf.usd_performance.annual_volatility * 100).toFixed(2)}%</strong><br />
-                        샤프지수: <strong>{customPerf.usd_performance.sharpe_ratio.toFixed(2)}</strong>
+                        기대수익률: <strong>{((customPerf.usd_performance.expected_annual_return || 0) * 100).toFixed(2)}%</strong><br />
+                        연간 변동성: <strong>{((customPerf.usd_performance.annual_volatility || 0) * 100).toFixed(2)}%</strong><br />
+                        샤프지수: <strong>{(customPerf.usd_performance.sharpe_ratio || 0).toFixed(2)}</strong>
                       </div>
                     </div>
 
                     <div style={{ background: '#ecfdf5', padding: '0.6rem', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
                       <span style={{ color: '#047857', fontWeight: 'bold', fontSize: '0.85rem' }}>🇰🇷 KRW 실전 기준 (환노출/헤지 체감)</span>
                       <div style={{ fontSize: '0.85rem', color: '#334155', marginTop: '0.3rem', lineHeight: '1.4' }}>
-                        기대수익률: <strong>{(customPerf.krw_performance.expected_annual_return * 100).toFixed(2)}%</strong><br />
-                        연간 변동성: <strong>{(customPerf.krw_performance.annual_volatility * 100).toFixed(2)}%</strong><br />
-                        샤프지수: <strong>{customPerf.krw_performance.sharpe_ratio.toFixed(2)}</strong>
+                        기대수익률: <strong>{((customPerf.krw_performance.expected_annual_return || 0) * 100).toFixed(2)}%</strong><br />
+                        연간 변동성: <strong>{((customPerf.krw_performance.annual_volatility || 0) * 100).toFixed(2)}%</strong><br />
+                        샤프지수: <strong>{(customPerf.krw_performance.sharpe_ratio || 0).toFixed(2)}</strong>
                       </div>
                     </div>
                   </div>

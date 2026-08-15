@@ -6,7 +6,7 @@ import Plot from 'react-plotly.js';
 export default function AnalysisTab({ session, setSession, onDeleteSession }) {
   const [dualData, setDualData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [lookback, setLookback] = useState(session.constraints.lookback_period || '5y');
+  const [lookback, setLookback] = useState(session.constraints?.lookback_period || '5y');
   const [perspective, setPerspective] = useState(session.constraints?.perspective || 'USD'); // 'USD' or 'KRW'
 
   // Axis range control states for the last 3 charts
@@ -32,16 +32,17 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
   const [volTickers, setVolTickers] = useState([]);
   const [cumTickers, setCumTickers] = useState([]);
 
-  const proxies = session.constraints.proxies || {};
-  const hedgedTickers = session.constraints.hedged_tickers || [];
+  const proxies = session.constraints?.proxies || {};
+  const hedgedTickers = session.constraints?.hedged_tickers || [];
 
   useEffect(() => {
-    if (session.tickers.length > 0) {
+    if (session.tickers && session.tickers.length > 0) {
       fetchAnalysis();
     } else {
       setDualData(null);
     }
   }, [session.tickers, lookback, JSON.stringify(hedgedTickers)]);
+
 
   const activeData = dualData ? (perspective === 'KRW' ? dualData.krw : dualData.usd) || dualData : null;
 
