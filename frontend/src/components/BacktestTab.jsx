@@ -322,10 +322,132 @@ export default function BacktestTab({ session, setSession }) {
     );
   };
 
+  const renderWeightsCard = () => {
+    const appliedWeights = session.constraints?.custom_weights || session.constraints?.opt_result?.weights || {};
+    const dualRes = session.constraints?.opt_dual_result;
+    const hedgedTickers = session.constraints?.hedged_tickers || [];
+    const tickers = session.tickers;
+
+    if (tickers.length === 0) return null;
+
+    // Detect which mode matches current weights
+    let weightSourceLabel = '✏️ 사용자 지정 / 현재 비중';
+    if (session.constraints?.is_custom_mode) {
+      weightSourceLabel = '✏️ 사용자 직접 편집 비중';
+    } else if (dualRes) {
+      const isUsdMatch = Object.keys(dualRes.usd_mode.weights).every(
+        t => Math.abs((dualRes.usd_mode.weights[t] || 0) - (appliedWeights[t] || 0)) < 0.001
+      );
+      const isKrwMatch = Object.keys(dualRes.krw_mode.weights).every(
+        t => Math.abs((dualRes.krw_mode.weights[t] || 0) - (appliedWeights[t] || 0)) < 0.001
+      );
+      if (isUsdMatch) weightSourceLabel = '🇺🇸 USD 모드 최적 비중';
+      else if (isKrwMatch) weightSourceLabel = '🇰🇷 KRW 모드 최적 비중';
+    }
+
+    const applyWeightsPreset = (newWeights, isCustom = false) => {
+      setSession(prev => ({
+        ...prev,
+        constraints: {
+          ...prev.constraints,
+          custom_weights: newWeights,
+          is_custom_mode: isCustom
+        }
+      }));
+    };
+
+    return (
+      <div className="card" style={{ marginBottom: '1.5rem', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h4 style={{ margin: 0, color: '#1e293b' }}>🎯 백테스트에 적용되는 포트폴리오 비중</h4>
+            <span style={{ fontSize: '0.8rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#eff6ff', color: '#1d4ed8', fontWeight: 'bold' }}>
+              {weightSourceLabel}
+            </span>
+          </div>
+
+          {/* Quick Preset Selector */}
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {dualRes?.usd_mode?.weights && (
+              <button
+                type="button"
+                onClick={() => applyWeightsPreset(dualRes.usd_mode.weights, false)}
+                style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#fff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+              >
+                🇺🇸 USD 최적 비중
+              </button>
+            )}
+            {dualRes?.krw_mode?.weights && (
+              <button
+                type="button"
+                onClick={() => applyWeightsPreset(dualRes.krw_mode.weights, false)}
+                style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#fff', border: '1px solid #a7f3d0', color: '#047857', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+              >
+                🇰🇷 KRW 최적 비중
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const eqW = {};
+                tickers.forEach(t => { eqW[t] = 1.0 / tickers.length; });
+                applyWeightsPreset(eqW, true);
+              }}
+              style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#fff', border: '1px solid #cbd5e1', color: '#475569', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              ⚖️ 1/N 동일 비중
+            </button>
+          </div>
+        </div>
+
+        {/* Ticker Badges Grid */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+          {tickers.map(t => {
+            const w = appliedWeights[t] !== undefined ? appliedWeights[t] : (1.0 / tickers.length);
+            const isHedged = hedgedTickers.includes(t);
+            const percent = (w * 100).toFixed(1);
+
+            return (
+              <div 
+                key={t}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  backgroundColor: '#fff',
+                  border: '1px solid #e2e8f0',
+                  fontSize: '0.85rem'
+                }}
+              >
+                <strong style={{ color: '#0f172a' }}>{t}</strong>
+                <span style={{
+                  fontSize: '0.75rem',
+                  padding: '1px 5px',
+                  borderRadius: '4px',
+                  background: isHedged ? '#ecfdf5' : '#f1f5f9',
+                  color: isHedged ? '#047857' : '#64748b'
+                }}>
+                  {isHedged ? '🛡️(H)' : '🌐환노출'}
+                </span>
+                <span style={{ fontWeight: 'bold', color: '#2563eb' }}>
+                  {percent}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
+      {renderWeightsCard()}
+
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
           <h3 style={{ margin: 0 }}>Backtest Settings</h3>
           
           {/* Currency Toggle & Live Exchange Rate Badge */}
@@ -383,6 +505,19 @@ export default function BacktestTab({ session, setSession }) {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Currency Logic Explanation Banner */}
+        <div style={{ backgroundColor: currency === 'KRW' ? '#f0fdf4' : '#eff6ff', border: `1px solid ${currency === 'KRW' ? '#bbf7d0' : '#bfdbfe'}`, padding: '8px 12px', borderRadius: '6px', fontSize: '0.82rem', color: '#334155', marginBottom: '1rem' }}>
+          {currency === 'KRW' ? (
+            <span>
+              🇰🇷 <strong>[원화 실전 백테스트]</strong>: 과거 {lookback} 기간 동안의 <strong>매일매일 실제 원/달러 환율(USDKRW=X)</strong>과 종목별 <strong>환헤지(H) / 환노출</strong> 설정이 시계열에 일별로 정확하게 반영됩니다.
+            </span>
+          ) : (
+            <span>
+              🇺🇸 <strong>[달러 순수 백테스트]</strong>: 환율 변동의 개입 없이 미국 본토 달러 자산의 순수 주가 수익률로만 자산 가치를 시뮬레이션합니다.
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
@@ -447,5 +582,6 @@ export default function BacktestTab({ session, setSession }) {
     </div>
   );
 }
+
 
 
