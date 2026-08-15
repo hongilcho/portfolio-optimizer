@@ -330,19 +330,25 @@ export default function BacktestTab({ session, setSession }) {
 
     if (tickers.length === 0) return null;
 
-    // Detect which mode matches current weights
-    let weightSourceLabel = '✏️ 사용자 지정 / 현재 비중';
-    if (session.constraints?.is_custom_mode) {
+    const isUsdSelected = dualRes && !session.constraints?.is_custom_mode && Object.keys(dualRes.usd_mode.weights).every(
+      t => Math.abs((dualRes.usd_mode.weights[t] || 0) - (appliedWeights[t] || 0)) < 0.001
+    );
+    const isKrwSelected = dualRes && !session.constraints?.is_custom_mode && Object.keys(dualRes.krw_mode.weights).every(
+      t => Math.abs((dualRes.krw_mode.weights[t] || 0) - (appliedWeights[t] || 0)) < 0.001
+    );
+    const isEqSelected = tickers.length > 0 && Object.keys(appliedWeights).length > 0 && tickers.every(
+      t => Math.abs((appliedWeights[t] || 0) - (1.0 / tickers.length)) < 0.001
+    );
+    const isCustomSelected = !!session.constraints?.is_custom_mode && !isEqSelected;
+
+    if (isCustomSelected) {
       weightSourceLabel = '✏️ 사용자 직접 편집 비중';
-    } else if (dualRes) {
-      const isUsdMatch = Object.keys(dualRes.usd_mode.weights).every(
-        t => Math.abs((dualRes.usd_mode.weights[t] || 0) - (appliedWeights[t] || 0)) < 0.001
-      );
-      const isKrwMatch = Object.keys(dualRes.krw_mode.weights).every(
-        t => Math.abs((dualRes.krw_mode.weights[t] || 0) - (appliedWeights[t] || 0)) < 0.001
-      );
-      if (isUsdMatch) weightSourceLabel = '🇺🇸 USD 모드 최적 비중';
-      else if (isKrwMatch) weightSourceLabel = '🇰🇷 KRW 모드 최적 비중';
+    } else if (isUsdSelected) {
+      weightSourceLabel = '🇺🇸 USD 모드 최적 비중';
+    } else if (isKrwSelected) {
+      weightSourceLabel = '🇰🇷 KRW 모드 최적 비중';
+    } else if (isEqSelected) {
+      weightSourceLabel = '⚖️ 1/N 동일 비중';
     }
 
     const applyWeightsPreset = (newWeights, isCustom = false) => {
@@ -351,19 +357,24 @@ export default function BacktestTab({ session, setSession }) {
         constraints: {
           ...prev.constraints,
           custom_weights: newWeights,
+          user_edited_weights: isCustom ? newWeights : (prev.constraints?.user_edited_weights || newWeights),
           is_custom_mode: isCustom
         }
       }));
     };
 
-    const userCustomWeights = session.constraints?.user_edited_weights || (session.constraints?.is_custom_mode ? session.constraints?.custom_weights : null);
+    // User custom weights fallback chain to guarantee it is always available
+    const userCustomWeights = session.constraints?.user_edited_weights 
+      || session.constraints?.custom_weights 
+      || (dualRes ? dualRes.usd_mode.weights : null)
+      || {};
 
     return (
       <div className="card" style={{ marginBottom: '1.5rem', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <h4 style={{ margin: 0, color: '#1e293b' }}>🎯 백테스트에 적용되는 포트폴리오 비중</h4>
-            <span style={{ fontSize: '0.8rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#eff6ff', color: '#1d4ed8', fontWeight: 'bold' }}>
+            <span style={{ fontSize: '0.8rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: isCustomSelected ? '#fef3c7' : '#eff6ff', color: isCustomSelected ? '#b45309' : '#1d4ed8', fontWeight: 'bold' }}>
               {weightSourceLabel}
             </span>
           </div>
@@ -374,7 +385,17 @@ export default function BacktestTab({ session, setSession }) {
               <button
                 type="button"
                 onClick={() => applyWeightsPreset(dualRes.usd_mode.weights, false)}
-                style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#fff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '0.78rem',
+                  background: isUsdSelected ? '#2563eb' : '#fff',
+                  border: `1px solid ${isUsdSelected ? '#1d4ed8' : '#bfdbfe'}`,
+                  color: isUsdSelected ? '#fff' : '#1d4ed8',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}
               >
                 🇺🇸 USD 최적 비중
               </button>
@@ -383,20 +404,38 @@ export default function BacktestTab({ session, setSession }) {
               <button
                 type="button"
                 onClick={() => applyWeightsPreset(dualRes.krw_mode.weights, false)}
-                style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#fff', border: '1px solid #a7f3d0', color: '#047857', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '0.78rem',
+                  background: isKrwSelected ? '#047857' : '#fff',
+                  border: `1px solid ${isKrwSelected ? '#065f46' : '#a7f3d0'}`,
+                  color: isKrwSelected ? '#fff' : '#047857',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}
               >
                 🇰🇷 KRW 최적 비중
               </button>
             )}
-            {userCustomWeights && (
-              <button
-                type="button"
-                onClick={() => applyWeightsPreset(userCustomWeights, true)}
-                style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#fffbeb', border: '1px solid #fde68a', color: '#b45309', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
-              >
-                ✏️ 사용자 직접 편집 비중
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => applyWeightsPreset(userCustomWeights, true)}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                background: isCustomSelected ? '#d97706' : '#fffbeb',
+                border: `1px solid ${isCustomSelected ? '#b45309' : '#fde68a'}`,
+                color: isCustomSelected ? '#fff' : '#b45309',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                transition: 'all 0.2s'
+              }}
+            >
+              ✏️ 사용자 직접 편집 비중
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -404,12 +443,22 @@ export default function BacktestTab({ session, setSession }) {
                 tickers.forEach(t => { eqW[t] = 1.0 / tickers.length; });
                 applyWeightsPreset(eqW, true);
               }}
-              style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#fff', border: '1px solid #cbd5e1', color: '#475569', borderRadius: '4px', cursor: 'pointer' }}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                background: isEqSelected ? '#475569' : '#fff',
+                border: `1px solid ${isEqSelected ? '#334155' : '#cbd5e1'}`,
+                color: isEqSelected ? '#fff' : '#475569',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
             >
               ⚖️ 1/N 동일 비중
             </button>
           </div>
         </div>
+
 
 
         {/* Ticker Badges Grid */}
