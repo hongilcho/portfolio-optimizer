@@ -77,8 +77,12 @@ export default function BacktestTab({ session, setSession }) {
         exchange_rate: exchangeRate
       };
 
-      const btResult = await api.runBacktest(session.tickers, targetWeights, lookback, payload, session.constraints.proxies || {});
+      const hedgedTickers = session.constraints?.hedged_tickers || [];
+      const btResult = await api.runBacktest(
+        session.tickers, targetWeights, lookback, payload, session.constraints?.proxies || {}, hedgedTickers
+      );
       const fullResult = { ...btResult, weights: targetWeights };
+
       
       setResult(fullResult);
       

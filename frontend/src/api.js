@@ -41,30 +41,35 @@ export const getExchangeRate = async () => {
   return response.data;
 };
 
-export const analyzeTickers = async (tickers, lookback_period, proxies = {}) => {
-  const response = await api.post('/analyze', { tickers, lookback_period, proxies });
+export const analyzeTickers = async (tickers, lookback_period, proxies = {}, hedged_tickers = []) => {
+  const response = await api.post('/analyze', { tickers, lookback_period, proxies, hedged_tickers });
   return response.data;
 };
 
-
-export const optimizePortfolio = async (tickers, constraints, lookback_period, objective, proxies = {}) => {
-  const response = await api.post('/optimize', { tickers, constraints, lookback_period, objective, proxies });
+export const optimizePortfolio = async (tickers, constraints, lookback_period, objective, proxies = {}, hedged_tickers = []) => {
+  const response = await api.post('/optimize', { tickers, constraints, lookback_period, objective, proxies, hedged_tickers });
   return response.data;
 };
 
-export const evaluatePortfolio = async (tickers, weights, lookback_period, proxies = {}) => {
-  const response = await api.post('/evaluate_portfolio', { tickers, weights, lookback_period, proxies });
+export const optimizePortfolioDual = async (tickers, constraints, lookback_period, objective, proxies = {}, hedged_tickers = []) => {
+  const response = await api.post('/optimize_dual', { tickers, constraints, lookback_period, objective, proxies, hedged_tickers });
   return response.data;
 };
 
+export const evaluatePortfolio = async (tickers, weights, lookback_period, proxies = {}, hedged_tickers = [], currency_mode = 'KRW') => {
+  const response = await api.post('/evaluate_portfolio', { tickers, weights, lookback_period, proxies, hedged_tickers, currency_mode });
+  return response.data;
+};
 
-export const runBacktest = async (tickers, weights, lookback_period, params, proxies = {}) => {
+export const runBacktest = async (tickers, weights, lookback_period, params, proxies = {}, hedged_tickers = []) => {
   const response = await api.post('/backtest', {
     tickers,
     weights,
     lookback_period,
     proxies,
+    hedged_tickers,
     ...params
   });
   return response.data;
 };
+

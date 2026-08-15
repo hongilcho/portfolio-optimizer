@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 import * as api from '../api';
 
-export default function TickerManager({ tickers, setTickers, proxies = {}, setProxies }) {
+export default function TickerManager({ 
+  tickers, 
+  setTickers, 
+  proxies = {}, 
+  setProxies,
+  hedgedTickers = [],
+  setHedgedTickers
+}) {
   const [input, setInput] = useState('');
   const [activeProxyTicker, setActiveProxyTicker] = useState(null);
   const [proxyRecommendations, setProxyRecommendations] = useState([]);
@@ -22,6 +29,18 @@ export default function TickerManager({ tickers, setTickers, proxies = {}, setPr
       const newProxies = { ...proxies };
       delete newProxies[tickerToRemove];
       setProxies(newProxies);
+    }
+    if (hedgedTickers && setHedgedTickers && hedgedTickers.includes(tickerToRemove)) {
+      setHedgedTickers(hedgedTickers.filter(t => t !== tickerToRemove));
+    }
+  };
+
+  const toggleHedge = (ticker) => {
+    if (!setHedgedTickers) return;
+    if (hedgedTickers.includes(ticker)) {
+      setHedgedTickers(hedgedTickers.filter(t => t !== ticker));
+    } else {
+      setHedgedTickers([...hedgedTickers, ticker]);
     }
   };
 
@@ -68,76 +87,100 @@ export default function TickerManager({ tickers, setTickers, proxies = {}, setPr
         <button className="btn" onClick={handleAdd}>Add</button>
       </div>
       <div>
-        {tickers.map(ticker => (
-          <div key={ticker} style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-            <span style={{ fontWeight: 'bold', minWidth: '60px' }}>{ticker}</span>
-            
-            {proxies[ticker] ? (
-              <span style={{ fontSize: '0.85rem', color: '#8b5cf6', background: '#ede9fe', padding: '2px 8px', borderRadius: '12px' }}>
-                Proxy: {proxies[ticker]}
-              </span>
-            ) : (
-              <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>No proxy</span>
-            )}
-            
-            <div style={{ marginLeft: 'auto' }}>
-              <button 
-                className="btn" 
-                style={{ padding: '4px 8px', fontSize: '0.8rem', background: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' }}
-                onClick={() => activeProxyTicker === ticker ? setActiveProxyTicker(null) : openProxyMenu(ticker)}
-              >
-                {proxies[ticker] ? 'Edit Proxy' : 'Set Proxy'}
-              </button>
-              <button 
-                onClick={() => handleRemove(ticker)}
-                style={{ background: 'none', border: 'none', marginLeft: '8px', cursor: 'pointer', color: '#ef4444', fontSize: '1.2rem' }}
-                title="Remove Ticker"
-              >
-                &times;
-              </button>
-            </div>
+        {tickers.map(ticker => {
+          const isHedged = hedgedTickers && hedgedTickers.includes(ticker);
 
-            {activeProxyTicker === ticker && (
-              <div style={{ width: '100%', marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <p style={{ fontSize: '0.9rem', marginBottom: '8px', fontWeight: 'bold' }}>Select a Proxy Ticker for {ticker}:</p>
-                <p style={{ fontSize: '0.8rem', marginBottom: '12px', color: '#64748b' }}>Proxies are used to backfill missing historical data before {ticker}'s inception date.</p>
-                
-                {loadingProxy ? (
-                  <p style={{ fontSize: '0.9rem' }}>Loading recommendations...</p>
-                ) : (
-                  <div style={{ display: 'grid', gap: '8px' }}>
-                    {proxyRecommendations.map(rec => (
-                      <button 
-                        key={rec.ticker}
-                        style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', textAlign: 'left' }}
-                        onClick={() => handleSetProxy(rec.ticker)}
-                      >
-                        <div>
-                          <strong style={{ color: '#3b82f6' }}>{rec.ticker}</strong> 
-                          <span style={{ fontSize: '0.85rem', marginLeft: '8px' }}>{rec.name}</span>
-                        </div>
-                        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{rec.reason}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input 
-                    className="input" 
-                    placeholder="Or enter custom ticker..." 
-                    value={customProxy}
-                    onChange={(e) => setCustomProxy(e.target.value)}
-                    style={{ flex: 1 }}
-                  />
-                  <button className="btn" onClick={() => handleSetProxy(customProxy)}>Apply</button>
-                  <button className="btn" style={{ background: '#ef4444' }} onClick={() => handleSetProxy('')}>Clear Proxy</button>
-                </div>
+          return (
+            <div key={ticker} style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+              <span style={{ fontWeight: 'bold', minWidth: '60px' }}>{ticker}</span>
+              
+              {/* Currency Hedging Badge Toggle */}
+              <button
+                type="button"
+                onClick={() => toggleHedge(ticker)}
+                title="클릭하여 환노출 / 환헤지(H) 전환"
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  border: isHedged ? '1px solid #10b981' : '1px solid #cbd5e1',
+                  background: isHedged ? '#ecfdf5' : '#f8fafc',
+                  color: isHedged ? '#047857' : '#64748b',
+                  fontWeight: isHedged ? 'bold' : 'normal',
+                  cursor: 'pointer'
+                }}
+              >
+                {isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출'}
+              </button>
+
+              {proxies[ticker] ? (
+                <span style={{ fontSize: '0.85rem', color: '#8b5cf6', background: '#ede9fe', padding: '2px 8px', borderRadius: '12px' }}>
+                  Proxy: {proxies[ticker]}
+                </span>
+              ) : (
+                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>No proxy</span>
+              )}
+              
+              <div style={{ marginLeft: 'auto' }}>
+                <button 
+                  className="btn" 
+                  style={{ padding: '4px 8px', fontSize: '0.8rem', background: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' }}
+                  onClick={() => activeProxyTicker === ticker ? setActiveProxyTicker(null) : openProxyMenu(ticker)}
+                >
+                  {proxies[ticker] ? 'Edit Proxy' : 'Set Proxy'}
+                </button>
+                <button 
+                  onClick={() => handleRemove(ticker)}
+                  style={{ background: 'none', border: 'none', marginLeft: '8px', cursor: 'pointer', color: '#ef4444', fontSize: '1.2rem' }}
+                  title="Remove Ticker"
+                >
+                  &times;
+                </button>
               </div>
-            )}
-          </div>
-        ))}
+
+              {activeProxyTicker === ticker && (
+                <div style={{ width: '100%', marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: '0.9rem', marginBottom: '8px', fontWeight: 'bold' }}>Select a Proxy Ticker for {ticker}:</p>
+                  <p style={{ fontSize: '0.8rem', marginBottom: '12px', color: '#64748b' }}>Proxies are used to backfill missing historical data before {ticker}'s inception date.</p>
+                  
+                  {loadingProxy ? (
+                    <p style={{ fontSize: '0.9rem' }}>Loading recommendations...</p>
+                  ) : (
+                    <div style={{ display: 'grid', gap: '8px' }}>
+                      {proxyRecommendations.map(rec => (
+                        <button 
+                          key={rec.ticker}
+                          style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', textAlign: 'left' }}
+                          onClick={() => handleSetProxy(rec.ticker)}
+                        >
+                          <div>
+                            <strong style={{ color: '#3b82f6' }}>{rec.ticker}</strong> 
+                            <span style={{ fontSize: '0.85rem', marginLeft: '8px' }}>{rec.name}</span>
+                          </div>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{rec.reason}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input 
+                      className="input" 
+                      placeholder="Or enter custom ticker..." 
+                      value={customProxy}
+                      onChange={(e) => setCustomProxy(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button className="btn" onClick={() => handleSetProxy(customProxy)}>Apply</button>
+                    <button className="btn" style={{ background: '#ef4444' }} onClick={() => handleSetProxy('')}>Clear Proxy</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
+

@@ -4,9 +4,10 @@ import TickerManager from './TickerManager';
 import Plot from 'react-plotly.js';
 
 export default function AnalysisTab({ session, setSession, onDeleteSession }) {
-  const [data, setData] = useState(null);
+  const [dualData, setDualData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lookback, setLookback] = useState(session.constraints.lookback_period || '5y');
+  const [perspective, setPerspective] = useState(session.constraints?.perspective || 'USD'); // 'USD' or 'KRW'
 
   // Axis range control states for the last 3 charts
   const [retXMin, setRetXMin] = useState('');
@@ -31,40 +32,58 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
   const [volTickers, setVolTickers] = useState([]);
   const [cumTickers, setCumTickers] = useState([]);
 
+  const proxies = session.constraints.proxies || {};
+  const hedgedTickers = session.constraints.hedged_tickers || [];
+
   useEffect(() => {
     if (session.tickers.length > 0) {
       fetchAnalysis();
     } else {
-      setData(null);
+      setDualData(null);
     }
-  }, [session.tickers, lookback]);
+  }, [session.tickers, lookback, JSON.stringify(hedgedTickers)]);
+
+  const activeData = dualData ? (perspective === 'KRW' ? dualData.krw : dualData.usd) || dualData : null;
 
   useEffect(() => {
-    if (data && data.stats) {
-      const allT = Object.keys(data.stats);
+    if (activeData && activeData.stats) {
+      const allT = Object.keys(activeData.stats);
       setRetTickers(allT);
       setVolTickers(allT);
       setCumTickers(allT);
     }
-  }, [data]);
-
-  const proxies = session.constraints.proxies || {};
+  }, [activeData, perspective]);
 
   const fetchAnalysis = async () => {
     setLoading(true);
     try {
-      const res = await api.analyzeTickers(session.tickers, lookback, proxies);
-      setData(res);
-      setSession({
-        ...session,
-        constraints: { ...session.constraints, lookback_period: lookback }
-      });
+      const res = await api.analyzeTickers(session.tickers, lookback, proxies, hedgedTickers);
+      setDualData(res);
+      setSession(prev => ({
+        ...prev,
+        constraints: { 
+          ...prev.constraints, 
+          lookback_period: lookback,
+          perspective
+        }
+      }));
     } catch (err) {
       console.error(err);
       alert("Failed to analyze data.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePerspectiveChange = (newP) => {
+    setPerspective(newP);
+    setSession(prev => ({
+      ...prev,
+      constraints: {
+        ...prev.constraints,
+        perspective: newP
+      }
+    }));
   };
 
   const getYAxisLayout = (yMinStr, yMaxStr, defaultValues, title, ticksuffix = '') => {
@@ -204,58 +223,149 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
   );
 
   const renderStatsTable = () => {
-    if (!data || !data.stats) return null;
-    const tickers = Object.keys(data.stats);
+    if (!activeData || !activeData.stats) return null;
+    const tickers = Object.keys(activeData.stats);
     return (
       <div className="card" style={{ marginTop: '1rem' }}>
-        <h3>Asset Statistics ({lookback})</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0 }}>Asset Statistics ({lookback}) - {perspective === 'KRW' ? '원화 체감 (환노출/헤지 반영)' : '순수 달러 (자산 본연 성향)'}</h3>
+        </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
               <th style={{ padding: '0.5rem' }}>Ticker</th>
+              <th style={{ padding: '0.5rem' }}>환구분</th>
               <th style={{ padding: '0.5rem' }}>CAGR</th>
               <th style={{ padding: '0.5rem' }}>Ann. Volatility</th>
               <th style={{ padding: '0.5rem' }}>Max Drawdown</th>
             </tr>
           </thead>
           <tbody>
-            {tickers.map(t => (
-              <tr key={t} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                <td style={{ padding: '0.5rem' }}>
-                  <span style={{ fontWeight: 'bold' }}>{t}</span>
-                  {data.stats[t].name && <span style={{ color: '#64748b', marginLeft: '0.5rem', fontSize: '0.9em' }}>({data.stats[t].name})</span>}
-                  {proxies[t] && <span style={{ color: '#8b5cf6', marginLeft: '0.5rem', fontSize: '0.8em', backgroundColor: '#ede9fe', padding: '2px 6px', borderRadius: '4px' }}>Proxy: {proxies[t]}</span>}
-                </td>
-                <td style={{ padding: '0.5rem' }}>{(data.stats[t].cagr * 100).toFixed(2)}%</td>
-                <td style={{ padding: '0.5rem' }}>{(data.stats[t].annual_volatility * 100).toFixed(2)}%</td>
-                <td style={{ padding: '0.5rem', color: '#ef4444' }}>{(data.stats[t].mdd * 100).toFixed(2)}%</td>
-              </tr>
-            ))}
+            {tickers.map(t => {
+              const isHedged = hedgedTickers.includes(t);
+              return (
+                <tr key={t} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '0.5rem' }}>
+                    <span style={{ fontWeight: 'bold' }}>{t}</span>
+                    {activeData.stats[t].name && <span style={{ color: '#64748b', marginLeft: '0.5rem', fontSize: '0.9em' }}>({activeData.stats[t].name})</span>}
+                    {proxies[t] && <span style={{ color: '#8b5cf6', marginLeft: '0.5rem', fontSize: '0.8em', backgroundColor: '#ede9fe', padding: '2px 6px', borderRadius: '4px' }}>Proxy: {proxies[t]}</span>}
+                  </td>
+                  <td style={{ padding: '0.5rem' }}>
+                    <span style={{
+                      fontSize: '0.8rem',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      background: isHedged ? '#ecfdf5' : '#f1f5f9',
+                      color: isHedged ? '#047857' : '#475569',
+                      fontWeight: isHedged ? 'bold' : 'normal'
+                    }}>
+                      {isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.5rem' }}>{(activeData.stats[t].cagr * 100).toFixed(2)}%</td>
+                  <td style={{ padding: '0.5rem' }}>{(activeData.stats[t].annual_volatility * 100).toFixed(2)}%</td>
+                  <td style={{ padding: '0.5rem', color: '#ef4444' }}>{(activeData.stats[t].mdd * 100).toFixed(2)}%</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
     );
   };
 
+  const renderFXCushionCard = () => {
+    if (!dualData || !dualData.fx_cushion || !dualData.fx_cushion.tickers) return null;
+    const fxStats = dualData.fx_cushion;
+    const tickers = Object.keys(fxStats.tickers);
+
+    return (
+      <div className="card" style={{ marginTop: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h3 style={{ margin: 0 }}>
+            원/달러 환율 분석 & 환쿠션 효과 (FX Cushion & Calibration)
+          </h3>
+          <span style={{ fontSize: '0.85rem', color: '#475569', backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '6px' }}>
+            USDKRW 환율 연환산 변동성: <strong>{(fxStats.fx_volatility * 100).toFixed(1)}%</strong>
+          </span>
+        </div>
+        <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 1rem 0' }}>
+          * <strong>환쿠션(Currency Cushion) 효과</strong>: 원/달러 환율과 음(-)의 상관관계를 가진 미국 자산은, 하락장에서 달러 급등으로 인해 원화 기준 실전 변동성이 줄어드는 위험 완화 효과를 누립니다.
+        </p>
+        
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left', backgroundColor: '#f8fafc' }}>
+                <th style={{ padding: '0.6rem' }}>Ticker</th>
+                <th style={{ padding: '0.6rem' }}>환구분</th>
+                <th style={{ padding: '0.6rem', textAlign: 'right' }}>환율 상관계수 (Corr)</th>
+                <th style={{ padding: '0.6rem', textAlign: 'right' }}>USD 변동성</th>
+                <th style={{ padding: '0.6rem', textAlign: 'right' }}>KRW 변동성</th>
+                <th style={{ padding: '0.6rem', textAlign: 'right' }}>환쿠션 효과 (ΔVol)</th>
+                <th style={{ padding: '0.6rem', textAlign: 'right' }}>USD MDD</th>
+                <th style={{ padding: '0.6rem', textAlign: 'right' }}>KRW MDD</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tickers.map(t => {
+                const item = fxStats.tickers[t];
+                const isHedged = item.is_hedged;
+                const isCushion = item.vol_diff < 0;
+
+                return (
+                  <tr key={t} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: '0.6rem', fontWeight: 'bold' }}>{t}</td>
+                    <td style={{ padding: '0.6rem' }}>
+                      <span style={{
+                        fontSize: '0.8rem',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        background: isHedged ? '#ecfdf5' : '#f1f5f9',
+                        color: isHedged ? '#047857' : '#475569',
+                        fontWeight: isHedged ? 'bold' : 'normal'
+                      }}>
+                        {isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: item.corr_with_fx < 0 ? '#10b981' : '#f59e0b' }}>
+                      {item.corr_with_fx.toFixed(2)}
+                    </td>
+                    <td style={{ padding: '0.6rem', textAlign: 'right' }}>{(item.vol_usd * 100).toFixed(1)}%</td>
+                    <td style={{ padding: '0.6rem', textAlign: 'right' }}>{(item.vol_krw * 100).toFixed(1)}%</td>
+                    <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: isHedged ? '#64748b' : (isCushion ? '#10b981' : '#f59e0b') }}>
+                      {isHedged ? '0.0%p (헤지됨)' : `${(item.vol_diff * 100).toFixed(1)}%p ${isCushion ? '(변동성 완화)' : '(변동성 증가)'}`}
+                    </td>
+                    <td style={{ padding: '0.6rem', textAlign: 'right', color: '#ef4444' }}>{(item.mdd_usd * 100).toFixed(1)}%</td>
+                    <td style={{ padding: '0.6rem', textAlign: 'right', color: '#ef4444' }}>{(item.mdd_krw * 100).toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   const renderYearlyStatsTable = () => {
-    if (!data || !data.stats) return null;
-    const tickers = Object.keys(data.stats);
+    if (!activeData || !activeData.stats) return null;
+    const tickers = Object.keys(activeData.stats);
     if (tickers.length === 0) return null;
 
-    // Collect all unique years
     const yearsSet = new Set();
     tickers.forEach(t => {
-      if (data.stats[t].yearly) {
-        Object.keys(data.stats[t].yearly).forEach(y => yearsSet.add(y));
+      if (activeData.stats[t].yearly) {
+        Object.keys(activeData.stats[t].yearly).forEach(y => yearsSet.add(y));
       }
     });
-    const years = Array.from(yearsSet).sort().reverse(); // Newest first
+    const years = Array.from(yearsSet).sort().reverse();
 
     if (years.length === 0) return null;
 
     return (
       <div className="card" style={{ marginTop: '1rem', overflowX: 'auto' }}>
-        <h3>Yearly Performance</h3>
+        <h3>Yearly Performance ({perspective})</h3>
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem', fontSize: '0.9rem' }}>
           <thead>
             <tr>
@@ -278,9 +388,9 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
               <tr key={y} style={{ borderBottom: '1px solid #e2e8f0' }}>
                 <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>{y}</td>
                 {tickers.map(t => {
-                  const yData = data.stats[t].yearly?.[y];
+                  const yData = activeData.stats[t].yearly?.[y];
                   const isProxy = yData?.is_proxy;
-                  const bgStyle = isProxy ? { backgroundColor: '#f5f3ff' } : {}; // very subtle purple
+                  const bgStyle = isProxy ? { backgroundColor: '#f5f3ff' } : {};
 
                   return (
                     <React.Fragment key={`${t}-${y}`}>
@@ -303,35 +413,32 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
   };
 
   const renderCharts = () => {
-    if (!data || !data.stats) return null;
+    if (!activeData || !activeData.stats) return null;
 
-    const corrTickers = Object.keys(data.correlation_matrix);
-    const corrZ = corrTickers.map(t1 => corrTickers.map(t2 => data.correlation_matrix[t1][t2]));
+    const corrTickers = Object.keys(activeData.correlation_matrix || {});
+    const corrZ = corrTickers.map(t1 => corrTickers.map(t2 => activeData.correlation_matrix[t1][t2]));
     const corrText = corrZ.map(row => row.map(val => (val !== undefined && val !== null) ? val.toFixed(2) : ''));
 
-    const covTickers = Object.keys(data.covariance_matrix);
-    const covZ = covTickers.map(t1 => covTickers.map(t2 => data.covariance_matrix[t1][t2]));
+    const covTickers = Object.keys(activeData.covariance_matrix || {});
+    const covZ = covTickers.map(t1 => covTickers.map(t2 => activeData.covariance_matrix[t1][t2]));
 
-    // Extract Yearly Data for Annual Returns & Volatility Graphs
-    const tickers = Object.keys(data.stats);
+    const tickers = Object.keys(activeData.stats);
     const yearsSet = new Set();
     tickers.forEach(t => {
-      if (data.stats[t]?.yearly) {
-        Object.keys(data.stats[t].yearly).forEach(y => yearsSet.add(y));
+      if (activeData.stats[t]?.yearly) {
+        Object.keys(activeData.stats[t].yearly).forEach(y => yearsSet.add(y));
       }
     });
     const sortedYears = Array.from(yearsSet).sort();
 
-    // Active tickers for each chart
     const activeRetTickers = retTickers.length > 0 ? tickers.filter(t => retTickers.includes(t)) : tickers;
     const activeVolTickers = volTickers.length > 0 ? tickers.filter(t => volTickers.includes(t)) : tickers;
     const activeCumTickers = cumTickers.length > 0 ? tickers.filter(t => cumTickers.includes(t)) : tickers;
 
-    // 1. Annual Returns (%) Traces & Range Filtering + Values Labeling + Ticker Filtering
     const filteredYearsRet = sortedYears.filter(y => (!retXMin || y >= retXMin) && (!retXMax || y <= retXMax));
     const annualReturnTraces = activeRetTickers.map(ticker => {
       const yVals = filteredYearsRet.map(y => {
-        const val = data.stats[ticker]?.yearly?.[y]?.return_rate;
+        const val = activeData.stats[ticker]?.yearly?.[y]?.return_rate;
         return val !== undefined && val !== null ? +(val * 100).toFixed(2) : null;
       });
 
@@ -349,11 +456,10 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
     });
     const allReturnValues = annualReturnTraces.flatMap(t => t.y);
 
-    // 2. Annual Volatility (%) Traces & Range Filtering + Values Labeling + Ticker Filtering
     const filteredYearsVol = sortedYears.filter(y => (!volXMin || y >= volXMin) && (!volXMax || y <= volXMax));
     const annualVolTraces = activeVolTickers.map(ticker => {
       const yVals = filteredYearsVol.map(y => {
-        const val = data.stats[ticker]?.yearly?.[y]?.volatility;
+        const val = activeData.stats[ticker]?.yearly?.[y]?.volatility;
         return val !== undefined && val !== null ? +(val * 100).toFixed(2) : null;
       });
 
@@ -371,23 +477,22 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
     });
     const allVolValues = annualVolTraces.flatMap(t => t.y);
 
-    // 3. Historical Cumulative Returns Line Traces & Re-basing on selected Start Year + Ticker Filtering
     const startCutoff = cumXMin ? `${cumXMin}-01-01` : '';
     const endCutoff = cumXMax ? `${cumXMax}-12-31` : '';
     const dateIndices = [];
-    data.dates.forEach((d, idx) => {
+    (activeData.dates || []).forEach((d, idx) => {
       if ((!startCutoff || d >= startCutoff) && (!endCutoff || d <= endCutoff)) {
         dateIndices.push(idx);
       }
     });
 
-    const filteredDates = dateIndices.map(i => data.dates[i]);
+    const filteredDates = dateIndices.map(i => activeData.dates[i]);
     const firstIdx = dateIndices.length > 0 ? dateIndices[0] : 0;
 
     const lineData = activeCumTickers.map(ticker => {
-      const baseVal = data.normalized_prices[ticker]?.[firstIdx];
+      const baseVal = activeData.normalized_prices?.[ticker]?.[firstIdx];
       const rebasedY = dateIndices.map(i => {
-        const currentVal = data.normalized_prices[ticker][i];
+        const currentVal = activeData.normalized_prices[ticker][i];
         if (baseVal && baseVal !== 0) {
           return +((currentVal / baseVal) * 100).toFixed(2);
         }
@@ -409,7 +514,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
         {/* 1. Heatmaps: Correlation Matrix & Covariance Matrix */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
           <div className="card">
-            <h3>Correlation Matrix</h3>
+            <h3>Correlation Matrix ({perspective})</h3>
             <Plot
               data={[{
                 z: corrZ,
@@ -431,7 +536,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
             />
           </div>
           <div className="card">
-            <h3>Covariance Matrix (Annualized)</h3>
+            <h3>Covariance Matrix ({perspective})</h3>
             <Plot
               data={[{
                 z: covZ,
@@ -450,7 +555,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
         {/* 2. Annual Returns Chart */}
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <h3 style={{ margin: 0 }}>Annual Returns (%)</h3>
+            <h3 style={{ margin: 0 }}>Annual Returns (%) ({perspective})</h3>
             {renderRangeControls(
               retXMin, setRetXMin, retXMax, setRetXMax, retYMin, setRetYMin, retYMax, setRetYMax, sortedYears, '%',
               showRetLabels, setShowRetLabels, () => setRetTickers(tickers)
@@ -475,7 +580,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
         {/* 3. Annual Volatility Chart */}
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <h3 style={{ margin: 0 }}>Annual Volatility (%)</h3>
+            <h3 style={{ margin: 0 }}>Annual Volatility (%) ({perspective})</h3>
             {renderRangeControls(
               volXMin, setVolXMin, volXMax, setVolXMax, volYMin, setVolYMin, volYMax, setVolYMax, sortedYears, '%',
               showVolLabels, setShowVolLabels, () => setVolTickers(tickers)
@@ -500,7 +605,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
         {/* 4. Historical Cumulative Returns Chart */}
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <h3 style={{ margin: 0 }}>Historical Cumulative Returns (Base=100{cumXMin ? ` from ${cumXMin}` : ''})</h3>
+            <h3 style={{ margin: 0 }}>Historical Cumulative Returns ({perspective}, Base=100{cumXMin ? ` from ${cumXMin}` : ''})</h3>
             {renderRangeControls(
               cumXMin, setCumXMin, cumXMax, setCumXMax, cumYMin, setCumYMin, cumYMax, setCumYMax, sortedYears, 'Price',
               null, null, () => setCumTickers(tickers)
@@ -524,23 +629,61 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
     );
   };
 
-
-
-
   return (
     <div>
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1.5, minWidth: '320px' }}>
           <TickerManager 
             tickers={session.tickers} 
             setTickers={(newTickers) => setSession({...session, tickers: newTickers})}
             proxies={proxies}
             setProxies={(newProxies) => setSession({...session, constraints: {...session.constraints, proxies: newProxies}})} 
+            hedgedTickers={hedgedTickers}
+            setHedgedTickers={(newHedged) => setSession({...session, constraints: {...session.constraints, hedged_tickers: newHedged}})}
           />
         </div>
-        <div className="card" style={{ flex: 1 }}>
-          <h3>Data Settings</h3>
-          <label style={{ display: 'block', marginBottom: '0.5rem' }}>Lookback Period</label>
+
+        <div className="card" style={{ flex: 1, minWidth: '280px' }}>
+          <h3>Data & Perspective Settings</h3>
+          
+          {/* Currency Perspective Toggle */}
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>통화 관점 (Currency Perspective)</label>
+          <div style={{ display: 'flex', borderRadius: '6px', border: '1px solid #cbd5e1', overflow: 'hidden', marginBottom: '1.2rem' }}>
+            <button
+              type="button"
+              onClick={() => handlePerspectiveChange('USD')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                background: perspective === 'USD' ? '#2563eb' : '#f8fafc',
+                color: perspective === 'USD' ? '#fff' : '#475569',
+                border: 'none',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              🇺🇸 USD (자산 본연 성향)
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePerspectiveChange('KRW')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                background: perspective === 'KRW' ? '#2563eb' : '#f8fafc',
+                color: perspective === 'KRW' ? '#fff' : '#475569',
+                border: 'none',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              🇰🇷 KRW (국내상장 ETF 체감)
+            </button>
+          </div>
+
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Lookback Period</label>
           <select 
             className="input" 
             value={lookback} 
@@ -563,13 +706,15 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
       {loading && <p style={{ marginTop: '1rem', textAlign: 'center' }}>Loading analysis data...</p>}
       
       {renderStatsTable()}
+      {renderFXCushionCard()}
       {renderYearlyStatsTable()}
       {renderCharts()}
       
-      {!loading && !data && session.tickers.length > 0 && (
+      {!loading && !activeData && session.tickers.length > 0 && (
         <p style={{ marginTop: '1rem', textAlign: 'center' }}>No data. Try reloading.</p>
       )}
     </div>
   );
 }
+
 

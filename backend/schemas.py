@@ -24,6 +24,7 @@ class BaseRequest(BaseModel):
     tickers: List[str]
     lookback_period: str = "5y"
     proxies: Dict[str, str] = {}
+    hedged_tickers: List[str] = []
 
 class OptimizationRequest(BaseRequest):
     constraints: Dict[str, Any]
@@ -35,14 +36,29 @@ class OptimizationResponse(BaseModel):
     annual_volatility: float
     sharpe_ratio: float
 
+class ModePerformance(BaseModel):
+    expected_annual_return: float
+    annual_volatility: float
+    sharpe_ratio: float
+
+class DualModeResult(BaseModel):
+    weights: Dict[str, float]
+    usd_performance: ModePerformance
+    krw_performance: ModePerformance
+
+class DualOptimizationResponse(BaseModel):
+    usd_mode: DualModeResult
+    krw_mode: DualModeResult
+    weight_deltas: Dict[str, float]
+
 class CustomEvaluateRequest(BaseRequest):
     weights: Dict[str, float]
+    currency_mode: str = "KRW"
 
 class CustomEvaluateResponse(BaseModel):
     expected_annual_return: float
     annual_volatility: float
     sharpe_ratio: float
-
 
 class YearlyStats(BaseModel):
     return_rate: float
@@ -63,6 +79,27 @@ class AnalyzeResponse(BaseModel):
     correlation_matrix: Dict[str, Dict[str, float]]
     covariance_matrix: Dict[str, Dict[str, float]]
 
+class FXCushionDetail(BaseModel):
+    is_hedged: bool = False
+    corr_with_fx: float
+    vol_usd: float
+    vol_krw: float
+    vol_diff: float
+    cagr_usd: float
+    cagr_krw: float
+    mdd_usd: float
+    mdd_krw: float
+
+class FXCushionResponse(BaseModel):
+    fx_volatility: float
+    tickers: Dict[str, FXCushionDetail]
+
+class DualAnalyzeResponse(BaseModel):
+    dates: List[str]
+    usd: AnalyzeResponse
+    krw: AnalyzeResponse
+    fx_cushion: FXCushionResponse
+
 class BacktestParams(BaseRequest):
     weights: Dict[str, float]
     initial_capital: float = 10000000.0
@@ -81,4 +118,5 @@ class BacktestResponse(BaseModel):
     rolling_volatility: List[float]
     currency: str = "KRW"
     exchange_rate: float = 1400.0
+
 

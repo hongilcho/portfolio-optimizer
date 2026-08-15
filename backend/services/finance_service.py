@@ -1,7 +1,7 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 def get_usd_krw_rate() -> float:
     """
@@ -170,8 +170,9 @@ def fetch_historical_data(tickers: List[str], period: str = "5y", proxies: Dict[
                     # 3. Apply scale
                     data[ticker] = sim_prices * scale
 
-        # Keep only the requested tickers
-        data = data[tickers]
+        # Keep only the requested tickers that exist in data
+        existing_tickers = [t for t in tickers if t in data.columns]
+        data = data[existing_tickers]
         
         # Drop rows where ANY of the requested tickers is STILL NaN (meaning proxy didn't help enough)
         data = data.dropna()
@@ -181,3 +182,46 @@ def fetch_historical_data(tickers: List[str], period: str = "5y", proxies: Dict[
         traceback.print_exc()
         print(f"Error fetching data: {e}")
         return pd.DataFrame()
+
+def fetch_dual_currency_data(
+    tickers: List[str], 
+    period: str = "5y", 
+    proxies: Dict[str, str] = None, 
+    hedged_tickers: List[str] = None
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
+    """
+    Fetches historical price data in both USD and KRW.
+    For tickers in hedged_tickers, the KRW series purely follows USD returns without FX fluctuations.
+    For unhedged tickers, KRW price = USD price * (USD/KRW rate).
+    Returns (data_usd, data_krw, fx_series).
+    """
+    if proxies is None:
+        proxies = {}
+    if hedged_tickers is None:
+        hedged_tickers = []
+
+    # Fetch tickers + proxies + USDKRW=X
+    all_needed = list(set(tickers + list(proxies.values()) + ["USDKRW=X"]))
+    
+    raw_data = fetch_historical_data(all_needed, period=period, proxies=proxies)
+    if raw_data.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.Series(dtype=float)
+        
+    fx_series = raw_data["USDKRW=X"] if "USDKRW=X" in raw_data.columns else pd.Series(1400.0, index=raw_data.index)
+    
+    avail_tickers = [t for t in tickers if t in raw_data.columns and t != "USDKRW=X"]
+    data_usd = raw_data[avail_tickers].copy()
+    
+    data_krw = pd.DataFrame(index=data_usd.index)
+    for t in avail_tickers:
+        if t in hedged_tickers:
+            # Currency-hedged: purely follows USD returns
+            usd_ret = data_usd[t].pct_change().fillna(0)
+            initial_krw_price = data_usd[t].iloc[0] * fx_series.iloc[0]
+            data_krw[t] = initial_krw_price * (1 + usd_ret).cumprod()
+        else:
+            # Unhedged: tracks USD price * FX rate
+            data_krw[t] = data_usd[t] * fx_series
+            
+    return data_usd, data_krw, fx_series
+

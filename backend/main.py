@@ -120,34 +120,56 @@ def get_proxy_recommendations(ticker: str):
     recs = finance_service.get_proxy_recommendations(ticker)
     return {"ticker": ticker, "recommendations": recs}
 
-@app.post("/analyze", response_model=schemas.AnalyzeResponse)
+@app.post("/analyze", response_model=schemas.DualAnalyzeResponse)
 def analyze(request: schemas.BaseRequest):
     tickers = request.tickers
     lookback = request.lookback_period
     proxies = request.proxies
+    hedged_tickers = request.hedged_tickers or []
     
     if not tickers:
         raise HTTPException(status_code=400, detail="No tickers provided")
         
     try:
-        # Pass proxies to finance_service
-        data = finance_service.fetch_historical_data(tickers, period=lookback, proxies=proxies)
-        if data.empty:
+        data_usd, data_krw, fx_series = finance_service.fetch_dual_currency_data(
+            tickers, period=lookback, proxies=proxies, hedged_tickers=hedged_tickers
+        )
+        if data_usd.empty:
             raise ValueError("No data found for the given tickers and period.")
             
-        dates, normalized_prices, stats, corr, cov = analysis_service.analyze_tickers(data)
+        dates_usd, norm_usd, stats_usd, corr_usd, cov_usd = analysis_service.analyze_tickers(data_usd)
+        dates_krw, norm_krw, stats_krw, corr_krw, cov_krw = analysis_service.analyze_tickers(data_krw)
         
         # Add ticker names to stats
-        for ticker in stats.keys():
+        for ticker in stats_usd.keys():
             info = finance_service.get_ticker_info(ticker)
-            stats[ticker]["name"] = info.get("shortName", "") or info.get("longName", "")
-            
-        return schemas.AnalyzeResponse(
-            dates=dates,
-            normalized_prices=normalized_prices,
-            stats=stats,
-            correlation_matrix=corr,
-            covariance_matrix=cov
+            name = info.get("shortName", "") or info.get("longName", "")
+            stats_usd[ticker]["name"] = name
+            if ticker in stats_krw:
+                stats_krw[ticker]["name"] = name
+                
+        fx_cushion = analysis_service.calculate_fx_cushion_stats(data_usd, data_krw, fx_series, hedged_tickers)
+        
+        usd_res = schemas.AnalyzeResponse(
+            dates=dates_usd,
+            normalized_prices=norm_usd,
+            stats=stats_usd,
+            correlation_matrix=corr_usd,
+            covariance_matrix=cov_usd
+        )
+        krw_res = schemas.AnalyzeResponse(
+            dates=dates_krw,
+            normalized_prices=norm_krw,
+            stats=stats_krw,
+            correlation_matrix=corr_krw,
+            covariance_matrix=cov_krw
+        )
+        
+        return schemas.DualAnalyzeResponse(
+            dates=dates_usd,
+            usd=usd_res,
+            krw=krw_res,
+            fx_cushion=schemas.FXCushionResponse(**fx_cushion)
         )
     except Exception as e:
         import traceback
@@ -157,14 +179,14 @@ def analyze(request: schemas.BaseRequest):
 @app.post("/optimize", response_model=schemas.OptimizationResponse)
 def optimize(request: schemas.OptimizationRequest):
     try:
-        data = finance_service.fetch_historical_data(request.tickers, period=request.lookback_period, proxies=request.proxies)
-        if data.empty:
+        data_usd, data_krw, _ = finance_service.fetch_dual_currency_data(
+            request.tickers, period=request.lookback_period, proxies=request.proxies, hedged_tickers=request.hedged_tickers
+        )
+        if data_usd.empty:
             raise ValueError("No data found for the given tickers.")
             
-        # Drop dates for optimization
-        # optimization_service uses data directly
         weights, exp_return, annual_vol, sharpe, _ = optimization_service.optimize_portfolio(
-            data, request.constraints, request.objective
+            data_usd, request.constraints, request.objective
         )
         return schemas.OptimizationResponse(
             weights=weights,
@@ -177,14 +199,35 @@ def optimize(request: schemas.OptimizationRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Optimization failed: {str(e)}")
 
+@app.post("/optimize_dual", response_model=schemas.DualOptimizationResponse)
+def optimize_dual(request: schemas.OptimizationRequest):
+    try:
+        data_usd, data_krw, _ = finance_service.fetch_dual_currency_data(
+            request.tickers, period=request.lookback_period, proxies=request.proxies, hedged_tickers=request.hedged_tickers
+        )
+        if data_usd.empty:
+            raise ValueError("No data found for the given tickers.")
+            
+        result = optimization_service.optimize_portfolio_dual(
+            data_usd, data_krw, request.constraints, request.objective
+        )
+        return schemas.DualOptimizationResponse(**result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Dual optimization failed: {str(e)}")
+
 @app.post("/evaluate_portfolio", response_model=schemas.CustomEvaluateResponse)
 def evaluate_portfolio(request: schemas.CustomEvaluateRequest):
     try:
-        data = finance_service.fetch_historical_data(request.tickers, period=request.lookback_period, proxies=request.proxies)
-        if data.empty:
+        data_usd, data_krw, _ = finance_service.fetch_dual_currency_data(
+            request.tickers, period=request.lookback_period, proxies=request.proxies, hedged_tickers=request.hedged_tickers
+        )
+        if data_usd.empty:
             raise ValueError("No data found for the given tickers.")
             
-        exp_return, annual_vol, sharpe = optimization_service.calculate_portfolio_performance(data, request.weights)
+        eval_data = data_krw if request.currency_mode == "KRW" else data_usd
+        exp_return, annual_vol, sharpe = optimization_service.calculate_portfolio_performance(eval_data, request.weights)
         return schemas.CustomEvaluateResponse(
             expected_annual_return=exp_return,
             annual_volatility=annual_vol,
@@ -195,7 +238,6 @@ def evaluate_portfolio(request: schemas.CustomEvaluateRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
 
-
 @app.get("/exchange_rate")
 def get_exchange_rate():
     rate = finance_service.get_usd_krw_rate()
@@ -204,16 +246,18 @@ def get_exchange_rate():
 @app.post("/backtest", response_model=schemas.BacktestResponse)
 def backtest(request: schemas.BacktestParams):
     try:
-        # Fetch portfolio tickers plus SPY for S&P 500 benchmark
         all_tickers = list(set(request.tickers + ["SPY"]))
-        data = finance_service.fetch_historical_data(all_tickers, period=request.lookback_period, proxies=request.proxies)
-        if data.empty:
+        data_usd, data_krw, _ = finance_service.fetch_dual_currency_data(
+            all_tickers, period=request.lookback_period, proxies=request.proxies, hedged_tickers=request.hedged_tickers
+        )
+        if data_usd.empty:
             raise ValueError("No data found for the given tickers.")
             
         rate = request.exchange_rate or finance_service.get_usd_krw_rate()
+        bt_data = data_krw if request.currency == "KRW" else data_usd
         
         dates, port_vals, bench_vals, spy_vals, returns, roll_vol = backtest_service.run_backtest(
-            data, request.weights, request.initial_capital, request.dca_amount, 
+            bt_data, request.weights, request.initial_capital, request.dca_amount, 
             request.rebalance_frequency, request.rebalance_threshold,
             currency=request.currency, exchange_rate=rate
         )
@@ -231,4 +275,5 @@ def backtest(request: schemas.BacktestParams):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
+
 

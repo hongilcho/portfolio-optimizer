@@ -70,3 +70,56 @@ def calculate_portfolio_performance(data: pd.DataFrame, weights: Dict[str, float
     
     return exp_return, volatility, sharpe_ratio
 
+def optimize_portfolio_dual(
+    data_usd: pd.DataFrame, 
+    data_krw: pd.DataFrame, 
+    constraints: Dict[str, Any], 
+    objective: str = "max_sharpe"
+) -> Dict[str, Any]:
+    """
+    Computes optimal portfolio weights under both USD fundamental base and KRW unhedged base.
+    Also evaluates cross-currency performance for both optimal portfolios.
+    """
+    # 1. Optimize on USD Base
+    usd_weights, usd_exp_ret, usd_vol, usd_sharpe, _ = optimize_portfolio(data_usd, constraints, objective)
+    usd_in_krw_ret, usd_in_krw_vol, usd_in_krw_sharpe = calculate_portfolio_performance(data_krw, usd_weights)
+    
+    # 2. Optimize on KRW Base
+    krw_weights, krw_exp_ret, krw_vol, krw_sharpe, _ = optimize_portfolio(data_krw, constraints, objective)
+    krw_in_usd_ret, krw_in_usd_vol, krw_in_usd_sharpe = calculate_portfolio_performance(data_usd, krw_weights)
+    
+    # Weight differences
+    all_tickers = list(data_usd.columns)
+    deltas = {t: round(krw_weights.get(t, 0.0) - usd_weights.get(t, 0.0), 4) for t in all_tickers}
+    
+    return {
+        "usd_mode": {
+            "weights": usd_weights,
+            "usd_performance": {
+                "expected_annual_return": usd_exp_ret,
+                "annual_volatility": usd_vol,
+                "sharpe_ratio": usd_sharpe
+            },
+            "krw_performance": {
+                "expected_annual_return": usd_in_krw_ret,
+                "annual_volatility": usd_in_krw_vol,
+                "sharpe_ratio": usd_in_krw_sharpe
+            }
+        },
+        "krw_mode": {
+            "weights": krw_weights,
+            "usd_performance": {
+                "expected_annual_return": krw_in_usd_ret,
+                "annual_volatility": krw_in_usd_vol,
+                "sharpe_ratio": krw_in_usd_sharpe
+            },
+            "krw_performance": {
+                "expected_annual_return": krw_exp_ret,
+                "annual_volatility": krw_vol,
+                "sharpe_ratio": krw_sharpe
+            }
+        },
+        "weight_deltas": deltas
+    }
+
+
