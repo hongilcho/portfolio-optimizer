@@ -175,77 +175,123 @@ export default function BacktestTab({ session, setSession }) {
   const renderComparisonTable = () => {
     if (!result || !result.portfolio_values || result.portfolio_values.length === 0) return null;
 
-    const pFinal = result.portfolio_values[result.portfolio_values.length - 1];
-    const bmFinal = result.benchmark_values ? result.benchmark_values[result.benchmark_values.length - 1] : 0;
-    const spyFinal = result.spy_values ? result.spy_values[result.spy_values.length - 1] : 0;
+    const totalInvested = result.total_invested || (params.initial_capital + (result.dca_count || 0) * (params.dca_amount || 0)) || result.portfolio_values[0];
 
-    const pStart = result.portfolio_values[0];
-    const bmStart = result.benchmark_values ? result.benchmark_values[0] : 1;
-    const spyStart = result.spy_values ? result.spy_values[0] : 1;
+    const pFinal = result.portfolio_stats?.final_value || result.portfolio_values[result.portfolio_values.length - 1];
+    const bmFinal = result.benchmark_stats?.final_value || (result.benchmark_values ? result.benchmark_values[result.benchmark_values.length - 1] : 0);
+    const spyFinal = result.spy_stats?.final_value || (result.spy_values ? result.spy_values[result.spy_values.length - 1] : 0);
 
-    const pTotalReturn = ((pFinal - pStart) / pStart) * 100;
-    const bmTotalReturn = ((bmFinal - bmStart) / bmStart) * 100;
-    const spyTotalReturn = ((spyFinal - spyStart) / spyStart) * 100;
+    const pNet = result.portfolio_stats?.net_profit !== undefined ? result.portfolio_stats.net_profit : (pFinal - totalInvested);
+    const bmNet = result.benchmark_stats?.net_profit !== undefined ? result.benchmark_stats.net_profit : (bmFinal - totalInvested);
+    const spyNet = result.spy_stats?.net_profit !== undefined ? result.spy_stats.net_profit : (spyFinal - totalInvested);
 
-    const pMdd = calculateMaxDrawdown(result.portfolio_values) * 100;
-    const bmMdd = calculateMaxDrawdown(result.benchmark_values) * 100;
-    const spyMdd = calculateMaxDrawdown(result.spy_values) * 100;
+    const pTotalReturn = result.portfolio_stats?.total_return_pct !== undefined ? result.portfolio_stats.total_return_pct : ((pNet / totalInvested) * 100);
+    const bmTotalReturn = result.benchmark_stats?.total_return_pct !== undefined ? result.benchmark_stats.total_return_pct : ((bmNet / totalInvested) * 100);
+    const spyTotalReturn = result.spy_stats?.total_return_pct !== undefined ? result.spy_stats.total_return_pct : ((spyNet / totalInvested) * 100);
+
+    const pAnnual = result.portfolio_stats?.annualized_return_pct;
+    const bmAnnual = result.benchmark_stats?.annualized_return_pct;
+    const spyAnnual = result.spy_stats?.annualized_return_pct;
+
+    const pMdd = result.portfolio_stats?.mdd_pct !== undefined ? result.portfolio_stats.mdd_pct : (calculateMaxDrawdown(result.portfolio_values) * 100);
+    const bmMdd = result.benchmark_stats?.mdd_pct !== undefined ? result.benchmark_stats.mdd_pct : (calculateMaxDrawdown(result.benchmark_values) * 100);
+    const spyMdd = result.spy_stats?.mdd_pct !== undefined ? result.spy_stats.mdd_pct : (calculateMaxDrawdown(result.spy_values) * 100);
 
     const currSymbol = currency === 'KRW' ? '₩' : '$';
+    const isDcaActive = params.dca_amount > 0 && (result.dca_count || 0) > 0;
 
     return (
-      <div className="card" style={{ marginTop: '1.5rem' }}>
-        <h3>Performance Summary Comparison</h3>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem', fontSize: '0.95rem' }}>
+      <div className="card" style={{ marginTop: '1.5rem', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <h3 style={{ margin: 0 }}>📊 전략별 백테스트 성과 종합 비교 (Performance Summary)</h3>
+          <span style={{ fontSize: '0.85rem', color: '#475569', backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px' }}>
+            총 투입 원금: <strong>{currSymbol}{Math.round(totalInvested).toLocaleString()}</strong>
+            {isDcaActive && ` (초기 ${currSymbol}${Number(params.initial_capital).toLocaleString()} + 월 적립 ${result.dca_count}회)`}
+          </span>
+        </div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem', fontSize: '0.9rem' }}>
           <thead>
-            <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
-              <th style={{ padding: '0.6rem' }}>Strategy</th>
-              <th style={{ padding: '0.6rem', textAlign: 'right' }}>Final Portfolio Value</th>
-              <th style={{ padding: '0.6rem', textAlign: 'right' }}>Total Return (%)</th>
-              <th style={{ padding: '0.6rem', textAlign: 'right' }}>Max Drawdown (MDD)</th>
+            <tr style={{ borderBottom: '2px solid #cbd5e1', backgroundColor: '#f8fafc', textAlign: 'left' }}>
+              <th style={{ padding: '10px 12px' }}>전략 (Strategy)</th>
+              <th style={{ padding: '10px 12px', textAlign: 'right' }}>총 투입 원금</th>
+              <th style={{ padding: '10px 12px', textAlign: 'right' }}>최종 평가액</th>
+              <th style={{ padding: '10px 12px', textAlign: 'right' }}>총 순손익</th>
+              <th style={{ padding: '10px 12px', textAlign: 'right' }}>총 누적 수익률 (%)</th>
+              <th style={{ padding: '10px 12px', textAlign: 'right' }}>연환산 수익률 ({isDcaActive ? 'MWRR' : 'CAGR'})</th>
+              <th style={{ padding: '10px 12px', textAlign: 'right' }}>최대 낙폭 (MDD)</th>
             </tr>
           </thead>
           <tbody>
             <tr style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#eff6ff' }}>
-              <td style={{ padding: '0.6rem', fontWeight: 'bold', color: '#1d4ed8' }}>
+              <td style={{ padding: '10px 12px', fontWeight: 'bold', color: '#1d4ed8' }}>
                 ● Optimized / Custom Portfolio
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold' }}>
+              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
+                {currSymbol}{Math.round(totalInvested).toLocaleString()}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold' }}>
                 {currSymbol}{Math.round(pFinal).toLocaleString()}
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: pTotalReturn >= 0 ? '#10b981' : '#ef4444' }}>
-                {pTotalReturn.toFixed(2)}%
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: pNet >= 0 ? '#047857' : '#ef4444' }}>
+                {pNet >= 0 ? `+${currSymbol}${Math.round(pNet).toLocaleString()}` : `-${currSymbol}${Math.round(Math.abs(pNet)).toLocaleString()}`}
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', color: '#ef4444' }}>
-                {pMdd.toFixed(2)}%
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: pTotalReturn >= 0 ? '#047857' : '#ef4444' }}>
+                {pTotalReturn >= 0 ? `+${pTotalReturn.toFixed(2)}%` : `${pTotalReturn.toFixed(2)}%`}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600', color: '#1e293b' }}>
+                {pAnnual !== undefined ? `${pAnnual.toFixed(2)}%` : '-'}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#ef4444', fontWeight: '600' }}>
+                -{Math.abs(pMdd).toFixed(2)}%
               </td>
             </tr>
+
             <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-              <td style={{ padding: '0.6rem', fontWeight: '600', color: '#059669' }}>
+              <td style={{ padding: '10px 12px', fontWeight: '600', color: '#059669' }}>
                 ● Equal-Weight Benchmark (1/N)
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold' }}>
+              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
+                {currSymbol}{Math.round(totalInvested).toLocaleString()}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold' }}>
                 {currSymbol}{Math.round(bmFinal).toLocaleString()}
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: bmTotalReturn >= 0 ? '#10b981' : '#ef4444' }}>
-                {bmTotalReturn.toFixed(2)}%
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: bmNet >= 0 ? '#047857' : '#ef4444' }}>
+                {bmNet >= 0 ? `+${currSymbol}${Math.round(bmNet).toLocaleString()}` : `-${currSymbol}${Math.round(Math.abs(bmNet)).toLocaleString()}`}
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', color: '#ef4444' }}>
-                {bmMdd.toFixed(2)}%
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: bmTotalReturn >= 0 ? '#047857' : '#ef4444' }}>
+                {bmTotalReturn >= 0 ? `+${bmTotalReturn.toFixed(2)}%` : `${bmTotalReturn.toFixed(2)}%`}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600', color: '#1e293b' }}>
+                {bmAnnual !== undefined ? `${bmAnnual.toFixed(2)}%` : '-'}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#ef4444', fontWeight: '600' }}>
+                -{Math.abs(bmMdd).toFixed(2)}%
               </td>
             </tr>
+
             <tr>
-              <td style={{ padding: '0.6rem', fontWeight: '600', color: '#d97706' }}>
+              <td style={{ padding: '10px 12px', fontWeight: '600', color: '#d97706' }}>
                 ● S&P 500 Benchmark (SPY)
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold' }}>
+              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
+                {currSymbol}{Math.round(totalInvested).toLocaleString()}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold' }}>
                 {currSymbol}{Math.round(spyFinal).toLocaleString()}
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: spyTotalReturn >= 0 ? '#10b981' : '#ef4444' }}>
-                {spyTotalReturn.toFixed(2)}%
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: spyNet >= 0 ? '#047857' : '#ef4444' }}>
+                {spyNet >= 0 ? `+${currSymbol}${Math.round(spyNet).toLocaleString()}` : `-${currSymbol}${Math.round(Math.abs(spyNet)).toLocaleString()}`}
               </td>
-              <td style={{ padding: '0.6rem', textAlign: 'right', color: '#ef4444' }}>
-                {spyMdd.toFixed(2)}%
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: spyTotalReturn >= 0 ? '#047857' : '#ef4444' }}>
+                {spyTotalReturn >= 0 ? `+${spyTotalReturn.toFixed(2)}%` : `${spyTotalReturn.toFixed(2)}%`}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600', color: '#1e293b' }}>
+                {spyAnnual !== undefined ? `${spyAnnual.toFixed(2)}%` : '-'}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#ef4444', fontWeight: '600' }}>
+                -{Math.abs(spyMdd).toFixed(2)}%
               </td>
             </tr>
           </tbody>
@@ -253,6 +299,7 @@ export default function BacktestTab({ session, setSession }) {
       </div>
     );
   };
+
 
   const renderChart = () => {
     if (!result || !result.portfolio_values) return null;

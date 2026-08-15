@@ -265,21 +265,13 @@ def backtest(request: schemas.BacktestParams):
         rate = request.exchange_rate or finance_service.get_usd_krw_rate()
         bt_data = data_krw if request.currency == "KRW" else data_usd
         
-        dates, port_vals, bench_vals, spy_vals, returns, roll_vol = backtest_service.run_backtest(
+        bt_result = backtest_service.run_backtest(
             bt_data, request.weights, request.initial_capital, request.dca_amount, 
             request.rebalance_frequency, request.rebalance_threshold,
             currency=request.currency, exchange_rate=rate
         )
-        return schemas.BacktestResponse(
-            dates=dates,
-            portfolio_values=port_vals,
-            benchmark_values=bench_vals,
-            spy_values=spy_vals,
-            returns=returns,
-            rolling_volatility=roll_vol,
-            currency=request.currency,
-            exchange_rate=rate
-        )
+        return schemas.BacktestResponse(**bt_result)
+
     except Exception as e:
         import traceback
         traceback.print_exc()

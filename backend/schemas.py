@@ -109,6 +109,14 @@ class BacktestParams(BaseRequest):
     currency: str = "KRW"
     exchange_rate: Optional[float] = None
 
+class StrategyPerformance(BaseModel):
+    final_value: float
+    total_invested: float
+    net_profit: float
+    total_return_pct: float
+    annualized_return_pct: float
+    mdd_pct: float
+
 class BacktestResponse(BaseModel):
     dates: List[str]
     portfolio_values: List[float]
@@ -118,5 +126,11 @@ class BacktestResponse(BaseModel):
     rolling_volatility: List[float]
     currency: str = "KRW"
     exchange_rate: float = 1400.0
+    total_invested: float
+    dca_count: int
+    portfolio_stats: Optional[StrategyPerformance] = None
+    benchmark_stats: Optional[StrategyPerformance] = None
+    spy_stats: Optional[StrategyPerformance] = None
+
 
 
