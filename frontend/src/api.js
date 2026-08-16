@@ -35,6 +35,17 @@ export const duplicateSession = async (id, newName) => {
   return response.data;
 };
 
+export const exportSessions = async () => {
+  const response = await api.get('/sessions/export');
+  return response.data;
+};
+
+export const importSessions = async (sessionsData) => {
+  const response = await api.post('/sessions/import', { sessions: sessionsData });
+  return response.data;
+};
+
+
 
 export const getProxyRecommendations = async (ticker) => {
   const response = await api.get(`/proxy/recommendations?ticker=${ticker}`);

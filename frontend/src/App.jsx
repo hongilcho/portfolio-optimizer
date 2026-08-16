@@ -105,6 +105,49 @@ function App() {
     }
   }
 
+  const handleExportSessions = async () => {
+    try {
+      const data = await api.exportSessions();
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `portfolio_sessions_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Failed to export sessions.");
+    }
+  };
+
+  const handleImportSessions = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        const sessionsData = parsed.sessions || (Array.isArray(parsed) ? parsed : []);
+        if (sessionsData.length === 0) {
+          alert("No valid sessions found in the file.");
+          return;
+        }
+        const res = await api.importSessions(sessionsData);
+        alert(res.message || "Sessions imported successfully!");
+        loadSessions();
+      } catch (err) {
+        console.error("Import failed:", err);
+        alert("Failed to import sessions. Invalid JSON format.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const handleDuplicateSession = async () => {
     if (!currentSession) return;
     const newName = prompt("Enter name for duplicated session:", `${currentSession.name} (Copy)`);
@@ -125,9 +168,34 @@ function App() {
     <div className="container">
       <div className="header">
         <h1>Portfolio Optimizer</h1>
-        <div>
-          <button className="btn" onClick={handleNewSession} style={{marginRight: '8px'}}>New Session</button>
-          {currentSession && <button className="btn" onClick={handleDuplicateSession} style={{marginRight: '8px', background: '#8b5cf6', color: '#fff'}}>Duplicate Session</button>}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn" onClick={handleNewSession}>New Session</button>
+          
+          {/* Export / Import buttons */}
+          <button 
+            className="btn" 
+            onClick={handleExportSessions}
+            style={{ background: '#475569', color: '#fff', fontSize: '0.88rem' }}
+            title="모든 세션을 JSON 파일로 다운로드하여 백업"
+          >
+            📤 세션 백업 (Export)
+          </button>
+          
+          <label 
+            className="btn" 
+            style={{ background: '#0d9488', color: '#fff', fontSize: '0.88rem', cursor: 'pointer', margin: 0 }}
+            title="기존 백업 JSON 파일을 불러와 세션 복원"
+          >
+            📥 세션 복원 (Import)
+            <input 
+              type="file" 
+              accept=".json" 
+              onChange={handleImportSessions} 
+              style={{ display: 'none' }} 
+            />
+          </label>
+
+          {currentSession && <button className="btn" onClick={handleDuplicateSession} style={{background: '#8b5cf6', color: '#fff'}}>Duplicate Session</button>}
           {currentSession && <button className="btn" onClick={handleSaveSession}>Save Session</button>}
         </div>
       </div>
@@ -135,6 +203,7 @@ function App() {
       {!currentSession ? (
         <div className="card">
           <h2>Your Sessions</h2>
+
           {sessions.length === 0 ? (
             <p>No sessions found. Create a new one to get started.</p>
           ) : (

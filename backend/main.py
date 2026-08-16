@@ -208,6 +208,41 @@ def update_session(session_id: int, session: schemas.SessionUpdate, db: Session 
         updated_at=s.updated_at
     )
 
+@app.get("/sessions/export")
+def export_sessions(db: Session = Depends(get_db)):
+    sessions = db.query(models.PortfolioSession).all()
+    data = []
+    for s in sessions:
+        data.append({
+            "id": s.id,
+            "name": s.name,
+            "tickers": json.loads(s.tickers) if isinstance(s.tickers, str) else s.tickers,
+            "constraints": json.loads(s.constraints) if isinstance(s.constraints, str) else s.constraints,
+            "chat_history": json.loads(s.chat_history) if isinstance(s.chat_history, str) else s.chat_history,
+            "created_at": s.created_at,
+            "updated_at": s.updated_at
+        })
+    return {"sessions": data}
+
+@app.post("/sessions/import")
+def import_sessions(payload: dict, db: Session = Depends(get_db)):
+    sessions_data = payload.get("sessions", [])
+    now = datetime.now().isoformat()
+    imported_count = 0
+    for s in sessions_data:
+        db_s = models.PortfolioSession(
+            name=s.get("name", "Imported Session"),
+            tickers=json.dumps(s.get("tickers", [])),
+            constraints=json.dumps(s.get("constraints", {})),
+            chat_history=json.dumps(s.get("chat_history", [])),
+            created_at=s.get("created_at", now),
+            updated_at=s.get("updated_at", now)
+        )
+        db.add(db_s)
+        imported_count += 1
+    db.commit()
+    return {"imported_count": imported_count, "message": f"{imported_count} sessions imported successfully"}
+
 @app.delete("/sessions/{session_id}")
 def delete_session(session_id: int, db: Session = Depends(get_db)):
     s = db.query(models.PortfolioSession).filter(models.PortfolioSession.id == session_id).first()
@@ -216,6 +251,7 @@ def delete_session(session_id: int, db: Session = Depends(get_db)):
     db.delete(s)
     db.commit()
     return {"message": "Session deleted"}
+
 
 
 @app.post("/sessions/{session_id}/duplicate", response_model=schemas.SessionResponse)
