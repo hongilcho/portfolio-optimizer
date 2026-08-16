@@ -36,10 +36,21 @@ export const getProxyRecommendations = async (ticker) => {
   return response.data;
 };
 
+export const validateProxy = async (ticker) => {
+  const response = await api.get(`/proxy/validate?ticker=${ticker}`);
+  return response.data;
+};
+
+export const getPortfolioCoverage = async (tickers, proxies = {}) => {
+  const response = await api.post('/tickers/coverage', { tickers, proxies });
+  return response.data;
+};
+
 export const getExchangeRate = async () => {
   const response = await api.get('/exchange_rate');
   return response.data;
 };
+
 
 export const analyzeTickers = async (tickers, lookback_period, proxies = {}, hedged_tickers = []) => {
   const response = await api.post('/analyze', { tickers, lookback_period, proxies, hedged_tickers });

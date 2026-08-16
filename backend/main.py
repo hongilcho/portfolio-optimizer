@@ -148,11 +148,19 @@ def delete_session(session_id: int, db: Session = Depends(get_db)):
 
 @app.get("/proxy/recommendations")
 def get_proxy_recommendations(ticker: str):
-
     recs = finance_service.get_proxy_recommendations(ticker)
     return {"ticker": ticker, "recommendations": recs}
 
+@app.get("/proxy/validate")
+def validate_proxy(ticker: str):
+    return finance_service.validate_proxy(ticker)
+
+@app.post("/tickers/coverage")
+def get_portfolio_coverage(request: schemas.BaseRequest):
+    return finance_service.get_portfolio_coverage(request.tickers, request.proxies)
+
 @app.post("/analyze", response_model=schemas.DualAnalyzeResponse)
+
 def analyze(request: schemas.BaseRequest):
     tickers = request.tickers
     lookback = request.lookback_period
