@@ -1,17 +1,23 @@
 import os
 import json
 import requests
+from pathlib import Path
 from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
 
-DEFAULT_MODEL = "gemini-2.5-pro"
+env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+
+DEFAULT_MODEL = "gemini-3.7-flash"
 
 AVAILABLE_MODELS = [
-    {"id": "gemini-2.5-pro", "name": "👑 Gemini 2.5 Pro (심층 금융 분석, 권장)", "is_default": True},
-    {"id": "gemini-2.0-flash-thinking-exp", "name": "🧠 Gemini 2.0 Thinking (단계별 심층 사고)", "is_default": False},
-    {"id": "gemini-2.5-flash", "name": "⚡ Gemini 2.5 Flash (초고속 응답)", "is_default": False},
-    {"id": "gemini-1.5-pro", "name": "🚀 Gemini 1.5 Pro (안정적 추론)", "is_default": False},
-    {"id": "gemini-1.5-flash", "name": "💡 Gemini 1.5 Flash (경량 모델)", "is_default": False},
+    {"id": "gemini-3.7-flash", "name": "👑 Gemini 3.7 Flash (심층 분석 & 추론, 권장)", "is_default": True},
+    {"id": "gemini-3.5-flash", "name": "⚡ Gemini 3.5 Flash (초고속 응답)", "is_default": False},
+    {"id": "gemini-flash-latest", "name": "🚀 Gemini Flash Latest (최신 안정판)", "is_default": False},
+    {"id": "gemini-3.1-pro-preview", "name": "🧠 Gemini 3.1 Pro (플래그십 Pro)", "is_default": False},
 ]
+
 
 def get_api_key(custom_key: Optional[str] = None) -> str:
     if custom_key and custom_key.strip():

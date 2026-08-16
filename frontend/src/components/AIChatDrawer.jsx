@@ -6,8 +6,9 @@ export default function AIChatDrawer({ session }) {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-pro');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.7-flash');
   const [availableModels, setAvailableModels] = useState([]);
+
   const [customApiKey, setCustomApiKey] = useState(localStorage.getItem('gemini_custom_api_key') || '');
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [quotaWarning, setQuotaWarning] = useState(null);

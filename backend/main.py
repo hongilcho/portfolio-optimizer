@@ -3,7 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 import json
+import os
+from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
+
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
 
 from sqlalchemy import text
 import models, schemas
