@@ -3,6 +3,8 @@ import * as api from './api'
 import AnalysisTab from './components/AnalysisTab'
 import OptimizationTab from './components/OptimizationTab'
 import BacktestTab from './components/BacktestTab'
+import AIChatDrawer from './components/AIChatDrawer'
+
 
 function App() {
   const [sessions, setSessions] = useState([])
@@ -205,6 +207,8 @@ function App() {
               />
             </div>
           </div>
+
+          <AIChatDrawer session={currentSession} />
         </div>
       )}
     </div>
@@ -212,4 +216,5 @@ function App() {
 }
 
 export default App
+
 

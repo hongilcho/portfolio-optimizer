@@ -5,11 +5,20 @@ from typing import List
 import json
 from datetime import datetime
 
+from sqlalchemy import text
 import models, schemas
 from database import engine, SessionLocal
-from services import finance_service, optimization_service, backtest_service, analysis_service
+from services import finance_service, optimization_service, backtest_service, analysis_service, ai_service
 
 models.Base.metadata.create_all(bind=engine)
+
+# Ensure chat_history column exists
+with engine.connect() as conn:
+    try:
+        conn.execute(text("ALTER TABLE sessions ADD COLUMN chat_history TEXT DEFAULT '[]'"))
+        conn.commit()
+    except Exception:
+        pass
 
 app = FastAPI(title="Portfolio Optimizer API")
 
@@ -30,6 +39,14 @@ def get_db():
     finally:
         db.close()
 
+def _parse_chat_history(raw_val) -> list:
+    if not raw_val:
+        return []
+    try:
+        return json.loads(raw_val)
+    except Exception:
+        return []
+
 @app.post("/sessions/", response_model=schemas.SessionResponse)
 def create_session(session: schemas.SessionCreate, db: Session = Depends(get_db)):
     now = datetime.now().isoformat()
@@ -37,6 +54,7 @@ def create_session(session: schemas.SessionCreate, db: Session = Depends(get_db)
         name=session.name,
         tickers=json.dumps(session.tickers),
         constraints=json.dumps(session.constraints),
+        chat_history=json.dumps(session.chat_history or []),
         created_at=now,
         updated_at=now
     )
@@ -49,6 +67,7 @@ def create_session(session: schemas.SessionCreate, db: Session = Depends(get_db)
         name=db_session.name,
         tickers=json.loads(db_session.tickers),
         constraints=json.loads(db_session.constraints),
+        chat_history=_parse_chat_history(db_session.chat_history),
         created_at=db_session.created_at,
         updated_at=db_session.updated_at
     )
@@ -63,6 +82,7 @@ def get_sessions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
             name=s.name,
             tickers=json.loads(s.tickers),
             constraints=json.loads(s.constraints),
+            chat_history=_parse_chat_history(s.chat_history),
             created_at=s.created_at,
             updated_at=s.updated_at
         ))
@@ -78,6 +98,7 @@ def get_session(session_id: int, db: Session = Depends(get_db)):
         name=s.name,
         tickers=json.loads(s.tickers),
         constraints=json.loads(s.constraints),
+        chat_history=_parse_chat_history(s.chat_history),
         created_at=s.created_at,
         updated_at=s.updated_at
     )
@@ -91,6 +112,8 @@ def update_session(session_id: int, session: schemas.SessionUpdate, db: Session 
     s.name = session.name
     s.tickers = json.dumps(session.tickers)
     s.constraints = json.dumps(session.constraints)
+    if session.chat_history is not None:
+        s.chat_history = json.dumps(session.chat_history)
     s.updated_at = datetime.now().isoformat()
     
     db.commit()
@@ -101,6 +124,7 @@ def update_session(session_id: int, session: schemas.SessionUpdate, db: Session 
         name=s.name,
         tickers=json.loads(s.tickers),
         constraints=json.loads(s.constraints),
+        chat_history=_parse_chat_history(s.chat_history),
         created_at=s.created_at,
         updated_at=s.updated_at
     )
@@ -113,6 +137,7 @@ def delete_session(session_id: int, db: Session = Depends(get_db)):
     db.delete(s)
     db.commit()
     return {"message": "Session deleted"}
+
 
 @app.get("/proxy/recommendations")
 def get_proxy_recommendations(ticker: str):
@@ -276,5 +301,67 @@ def backtest(request: schemas.BacktestParams):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
+
+# ==========================================
+# AI Portfolio Advisor Endpoints
+# ==========================================
+
+@app.get("/ai/models")
+def get_ai_models():
+    return {"models": ai_service.AVAILABLE_MODELS}
+
+@app.get("/sessions/{session_id}/chat")
+def get_chat_history(session_id: int, db: Session = Depends(get_db)):
+    s = db.query(models.PortfolioSession).filter(models.PortfolioSession.id == session_id).first()
+    if s is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"chat_history": _parse_chat_history(s.chat_history)}
+
+@app.post("/sessions/{session_id}/chat", response_model=schemas.ChatResponse)
+def send_chat_message(session_id: int, request: schemas.ChatRequest, db: Session = Depends(get_db)):
+    s = db.query(models.PortfolioSession).filter(models.PortfolioSession.id == session_id).first()
+    if s is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session_data = {
+        "id": s.id,
+        "name": s.name,
+        "tickers": json.loads(s.tickers),
+        "constraints": json.loads(s.constraints),
+        "created_at": s.created_at
+    }
+    
+    chat_history = _parse_chat_history(s.chat_history)
+    
+    # Call Gemini API
+    ai_result = ai_service.generate_chat_response(
+        session_data=session_data,
+        chat_history=chat_history,
+        user_message=request.message,
+        model_name=request.model,
+        custom_api_key=request.api_key
+    )
+    
+    if ai_result.get("success"):
+        # Append user message and model response to history
+        now_ts = datetime.now().strftime("%H:%M")
+        chat_history.append({"role": "user", "content": request.message, "timestamp": now_ts})
+        chat_history.append({"role": "model", "content": ai_result.get("reply", ""), "timestamp": now_ts, "model": request.model})
+        s.chat_history = json.dumps(chat_history)
+        s.updated_at = datetime.now().isoformat()
+        db.commit()
+    
+    return schemas.ChatResponse(**ai_result)
+
+@app.delete("/sessions/{session_id}/chat")
+def clear_chat_history(session_id: int, db: Session = Depends(get_db)):
+    s = db.query(models.PortfolioSession).filter(models.PortfolioSession.id == session_id).first()
+    if s is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    s.chat_history = json.dumps([])
+    s.updated_at = datetime.now().isoformat()
+    db.commit()
+    return {"message": "Chat history cleared successfully"}
+
 
 

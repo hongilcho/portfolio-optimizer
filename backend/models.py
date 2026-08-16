@@ -8,5 +8,7 @@ class PortfolioSession(Base):
     name = Column(String, index=True)
     tickers = Column(Text) # JSON string of list of tickers
     constraints = Column(Text) # JSON string of constraints
+    chat_history = Column(Text, default="[]") # JSON string of list of chat messages
     created_at = Column(String)
     updated_at = Column(String)
+

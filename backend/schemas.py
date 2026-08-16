@@ -5,6 +5,7 @@ class SessionBase(BaseModel):
     name: str
     tickers: List[str]
     constraints: Dict[str, Any]
+    chat_history: Optional[List[Dict[str, Any]]] = []
 
 class SessionCreate(SessionBase):
     pass
@@ -19,6 +20,7 @@ class SessionResponse(SessionBase):
 
     class Config:
         from_attributes = True
+
 
 class BaseRequest(BaseModel):
     tickers: List[str]
@@ -131,6 +133,19 @@ class BacktestResponse(BaseModel):
     portfolio_stats: Optional[StrategyPerformance] = None
     benchmark_stats: Optional[StrategyPerformance] = None
     spy_stats: Optional[StrategyPerformance] = None
+
+class ChatRequest(BaseModel):
+    message: str
+    model: str = "gemini-2.5-pro"
+    api_key: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    success: bool
+    reply: Optional[str] = None
+    message: Optional[str] = None
+    model_used: Optional[str] = None
+    error_type: Optional[str] = None
+
 
 
 

@@ -73,3 +73,28 @@ export const runBacktest = async (tickers, weights, lookback_period, params, pro
   return response.data;
 };
 
+export const getAIModels = async () => {
+  const response = await api.get('/ai/models');
+  return response.data;
+};
+
+export const getChatHistory = async (sessionId) => {
+  const response = await api.get(`/sessions/${sessionId}/chat`);
+  return response.data;
+};
+
+export const sendChatMessage = async (sessionId, message, model = 'gemini-2.5-pro', apiKey = null) => {
+  const response = await api.post(`/sessions/${sessionId}/chat`, {
+    message,
+    model,
+    api_key: apiKey
+  });
+  return response.data;
+};
+
+export const clearChatHistory = async (sessionId) => {
+  const response = await api.delete(`/sessions/${sessionId}/chat`);
+  return response.data;
+};
+
+
