@@ -58,8 +58,11 @@ export default function AnalysisTab({ session, setSession, onDeleteSession, tick
     }
   }, [activeData, perspective]);
 
+  const [errorMsg, setErrorMsg] = useState(null);
+
   const fetchAnalysis = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const res = await api.analyzeTickers(session.tickers, lookback, proxies, hedgedTickers);
       setDualData(res);
@@ -73,11 +76,12 @@ export default function AnalysisTab({ session, setSession, onDeleteSession, tick
       }));
     } catch (err) {
       console.error(err);
-      alert("Failed to analyze data.");
+      setErrorMsg("과거 주가 데이터를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setLoading(false);
     }
   };
+
 
   const handlePerspectiveChange = (newP) => {
     setPerspective(newP);
@@ -730,17 +734,34 @@ export default function AnalysisTab({ session, setSession, onDeleteSession, tick
         tickerNames={tickerNames}
       />
 
-      {loading && <p style={{ marginTop: '1rem', textAlign: 'center' }}>Loading analysis data...</p>}
+      {loading && (
+        <div style={{ margin: '1.5rem 0', padding: '16px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', textAlign: 'center', color: '#166534', fontSize: '0.95rem' }}>
+          <span>⏳ 과거 주가 및 환율 데이터를 분석하고 있습니다... (데이터가 많거나 서버 최초 기동 시 몇 초 정도 소요될 수 있습니다)</span>
+        </div>
+      )}
 
-      
+      {errorMsg && !loading && (
+        <div style={{ margin: '1.5rem 0', padding: '16px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <span style={{ color: '#991b1b', fontSize: '0.92rem' }}>⚠️ {errorMsg}</span>
+          <button 
+            className="btn" 
+            onClick={fetchAnalysis}
+            style={{ background: '#dc2626', color: '#fff', padding: '6px 14px', fontSize: '0.85rem' }}
+          >
+            🔄 다시 시도
+          </button>
+        </div>
+      )}
+
       {renderStatsTable()}
       {renderFXCushionCard()}
       {renderYearlyStatsTable()}
       {renderCharts()}
       
-      {!loading && !activeData && session.tickers.length > 0 && (
-        <p style={{ marginTop: '1rem', textAlign: 'center' }}>No data. Try reloading.</p>
+      {!loading && !activeData && !errorMsg && session.tickers.length > 0 && (
+        <p style={{ marginTop: '1rem', textAlign: 'center', color: '#64748b' }}>No data. Try reloading.</p>
       )}
+
     </div>
   );
 }
