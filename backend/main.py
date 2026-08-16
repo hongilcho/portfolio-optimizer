@@ -15,7 +15,7 @@ load_dotenv(dotenv_path=env_path)
 from sqlalchemy import text
 import models, schemas
 from database import engine, SessionLocal
-from services import finance_service, optimization_service, backtest_service, analysis_service, ai_service
+from services import finance_service, optimization_service, backtest_service, analysis_service, ai_service, search_service
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -146,6 +146,35 @@ def delete_session(session_id: int, db: Session = Depends(get_db)):
     return {"message": "Session deleted"}
 
 
+@app.post("/sessions/{session_id}/duplicate", response_model=schemas.SessionResponse)
+def duplicate_session(session_id: int, duplicate_req: schemas.SessionDuplicateRequest, db: Session = Depends(get_db)):
+    s = db.query(models.PortfolioSession).filter(models.PortfolioSession.id == session_id).first()
+    if s is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    new_session = models.PortfolioSession(
+        name=duplicate_req.name,
+        tickers=s.tickers,
+        constraints=s.constraints,
+        chat_history=s.chat_history,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    db.add(new_session)
+    db.commit()
+    db.refresh(new_session)
+    
+    return schemas.SessionResponse(
+        id=new_session.id,
+        name=new_session.name,
+        tickers=json.loads(new_session.tickers),
+        constraints=json.loads(new_session.constraints),
+        chat_history=_parse_chat_history(new_session.chat_history),
+        created_at=new_session.created_at,
+        updated_at=new_session.updated_at
+    )
+
+
 @app.get("/proxy/recommendations")
 def get_proxy_recommendations(ticker: str):
     recs = finance_service.get_proxy_recommendations(ticker)
@@ -159,8 +188,16 @@ def validate_proxy(ticker: str):
 def get_portfolio_coverage(request: schemas.BaseRequest):
     return finance_service.get_portfolio_coverage(request.tickers, request.proxies)
 
-@app.post("/analyze", response_model=schemas.DualAnalyzeResponse)
+@app.get("/tickers/search")
+def search_tickers(q: str):
+    return search_service.search_tickers(q)
 
+@app.get("/tickers/names")
+def get_ticker_names(q: str):
+    tickers = [t.strip() for t in q.split(",") if t.strip()]
+    return search_service.get_ticker_names(tickers)
+
+@app.post("/analyze", response_model=schemas.DualAnalyzeResponse)
 def analyze(request: schemas.BaseRequest):
     tickers = request.tickers
     lookback = request.lookback_period
@@ -180,10 +217,10 @@ def analyze(request: schemas.BaseRequest):
         dates_usd, norm_usd, stats_usd, corr_usd, cov_usd = analysis_service.analyze_tickers(data_usd)
         dates_krw, norm_krw, stats_krw, corr_krw, cov_krw = analysis_service.analyze_tickers(data_krw)
         
-        # Add ticker names to stats
+        # Add ticker names to stats instantly using search_service
+        ticker_names_map = search_service.get_ticker_names(list(stats_usd.keys()))
         for ticker in stats_usd.keys():
-            info = finance_service.get_ticker_info(ticker)
-            name = info.get("shortName", "") or info.get("longName", "")
+            name = ticker_names_map.get(ticker, "")
             stats_usd[ticker]["name"] = name
             if ticker in stats_krw:
                 stats_krw[ticker]["name"] = name
@@ -209,7 +246,8 @@ def analyze(request: schemas.BaseRequest):
             dates=dates_usd,
             usd=usd_res,
             krw=krw_res,
-            fx_cushion=schemas.FXCushionResponse(**fx_cushion)
+            fx_cushion=schemas.FXCushionResponse(**fx_cushion),
+            ticker_names=ticker_names_map
         )
     except Exception as e:
         import traceback

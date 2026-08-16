@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../api';
 import OptimizationSettings from './OptimizationSettings';
+import HistoricalCoverageCard from './HistoricalCoverageCard';
 import Plot from 'react-plotly.js';
+import { formatTickerDisplay } from '../utils/formatters';
 
-export default function OptimizationTab({ session, setSession }) {
+export default function OptimizationTab({ session, setSession, tickerNames }) {
   const [dualResult, setDualResult] = useState(session.constraints?.opt_dual_result || null);
   const [optBase, setOptBase] = useState(session.constraints?.opt_base || 'USD'); // 'USD', 'KRW', 'DUAL'
   const [editableWeights, setEditableWeights] = useState(
@@ -13,6 +15,17 @@ export default function OptimizationTab({ session, setSession }) {
   const [loading, setLoading] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [customPerf, setCustomPerf] = useState(null);
+  const [coverageData, setCoverageData] = useState(null);
+
+  useEffect(() => {
+    if (session.tickers && session.tickers.length > 0) {
+      api.getPortfolioCoverage(session.tickers, session.constraints?.proxies || {})
+        .then(res => setCoverageData(res))
+        .catch(err => console.error(err));
+    } else {
+      setCoverageData(null);
+    }
+  }, [session.tickers, session.constraints?.proxies]);
 
   useEffect(() => {
     if (session.constraints?.opt_dual_result?.usd_mode && session.constraints?.opt_dual_result?.krw_mode) {
@@ -33,7 +46,7 @@ export default function OptimizationTab({ session, setSession }) {
     }
   }, [session.id]);
 
-  const lookback = session.constraints?.lookback_period || '5y';
+  const lookback = session.constraints?.opt_lookback_period || session.constraints?.lookback_period || '5y';
   const objective = session.constraints?.objective || 'max_sharpe';
   const hedgedTickers = session.constraints?.hedged_tickers || [];
   const proxies = session.constraints?.proxies || {};
@@ -53,10 +66,10 @@ export default function OptimizationTab({ session, setSession }) {
       setIsCustomMode(false);
       setCustomPerf(null);
 
-      setSession({
-        ...session,
+      setSession(prev => ({
+        ...prev,
         constraints: {
-          ...session.constraints,
+          ...prev.constraints,
           opt_dual_result: dualRes,
           opt_result: {
             weights: activeWeights,
@@ -68,7 +81,7 @@ export default function OptimizationTab({ session, setSession }) {
           is_custom_mode: false,
           opt_base: optBase
         }
-      });
+      }));
     } catch (err) {
       console.error(err);
       alert("Optimization failed. Check console for details.");
@@ -183,10 +196,17 @@ export default function OptimizationTab({ session, setSession }) {
   };
 
   const handleObjectiveChange = (e) => {
-    setSession({
-      ...session,
-      constraints: { ...session.constraints, objective: e.target.value }
-    });
+    setSession(prev => ({
+      ...prev,
+      constraints: { ...prev.constraints, objective: e.target.value }
+    }));
+  };
+
+  const handleLookbackChange = (newVal) => {
+    setSession(prev => ({
+      ...prev,
+      constraints: { ...prev.constraints, opt_lookback_period: newVal }
+    }));
   };
 
   const renderComparisonSection = () => {
@@ -224,8 +244,8 @@ export default function OptimizationTab({ session, setSession }) {
             <div style={{ width: '100%', minWidth: 0, height: '240px', overflow: 'hidden' }}>
               <Plot
                 data={[{
-                  labels: Object.keys(usdMode.weights || {}).filter(k => (usdMode.weights[k] || 0) > 0.001),
-                  values: Object.keys(usdMode.weights || {}).filter(k => (usdMode.weights[k] || 0) > 0.001).map(k => usdMode.weights[k]),
+                  labels: Object.keys(usdMode.weights || {}).filter(k => (usdMode.weights[k] || 0) > 0.001).map(t => formatTickerDisplay(t, tickerNames)),
+                  values: Object.keys(usdMode.weights || {}).filter(k => (usdMode.weights[k] || 0) > 0.001).map(k => usdMode.weights[k] * 100),
                   type: 'pie',
                   hole: 0.4,
                   textinfo: 'label+percent',
@@ -252,8 +272,8 @@ export default function OptimizationTab({ session, setSession }) {
             <div style={{ width: '100%', minWidth: 0, height: '240px', overflow: 'hidden' }}>
               <Plot
                 data={[{
-                  labels: Object.keys(krwMode.weights || {}).filter(k => (krwMode.weights[k] || 0) > 0.001),
-                  values: Object.keys(krwMode.weights || {}).filter(k => (krwMode.weights[k] || 0) > 0.001).map(k => krwMode.weights[k]),
+                  labels: Object.keys(krwMode.weights || {}).filter(k => (krwMode.weights[k] || 0) > 0.001).map(t => formatTickerDisplay(t, tickerNames)),
+                  values: Object.keys(krwMode.weights || {}).filter(k => (krwMode.weights[k] || 0) > 0.001).map(k => krwMode.weights[k] * 100),
                   type: 'pie',
                   hole: 0.4,
                   textinfo: 'label+percent',
@@ -305,7 +325,7 @@ export default function OptimizationTab({ session, setSession }) {
 
                   return (
                     <tr key={ticker} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 'bold' }}>{ticker}</td>
+                      <td style={{ padding: '10px 12px', fontWeight: 'bold' }}>{formatTickerDisplay(ticker, tickerNames)}</td>
                       <td style={{ padding: '10px 12px' }}>
                         <span style={{
                           fontSize: '0.75rem',
@@ -439,67 +459,82 @@ export default function OptimizationTab({ session, setSession }) {
     <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1rem', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         <OptimizationSettings 
-
           tickers={session.tickers}
           constraints={session.constraints}
-          setConstraints={(newConstraints) => setSession({...session, constraints: newConstraints})}
+          setConstraints={(newConstraints) => setSession(prev => ({...prev, constraints: newConstraints}))}
         />
 
         <div className="card">
           <h3>Optimization Engine</h3>
-          
-          {/* Optimization Mode Toggle */}
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>최적화 기준 (Optimization Base)</label>
-          <div style={{ display: 'flex', borderRadius: '6px', border: '1px solid #cbd5e1', overflow: 'hidden', marginBottom: '1.2rem' }}>
-            <button
-              type="button"
-              onClick={() => handleBaseChange('USD')}
-              style={{
-                flex: 1,
-                padding: '8px',
-                background: optBase === 'USD' ? '#2563eb' : '#f8fafc',
-                color: optBase === 'USD' ? '#fff' : '#475569',
-                border: 'none',
-                fontWeight: '600',
-                cursor: 'pointer',
-                fontSize: '0.8rem'
-              }}
-            >
-              🇺🇸 USD 펀더멘털 (권장)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBaseChange('KRW')}
-              style={{
-                flex: 1,
-                padding: '8px',
-                background: optBase === 'KRW' ? '#2563eb' : '#f8fafc',
-                color: optBase === 'KRW' ? '#fff' : '#475569',
-                border: 'none',
-                fontWeight: '600',
-                cursor: 'pointer',
-                fontSize: '0.8rem'
-              }}
-            >
-              🇰🇷 KRW 실전 리스크
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBaseChange('DUAL')}
-              style={{
-                flex: 1,
-                padding: '8px',
-                background: optBase === 'DUAL' ? '#2563eb' : '#f8fafc',
-                color: optBase === 'DUAL' ? '#fff' : '#475569',
-                border: 'none',
-                fontWeight: '600',
-                cursor: 'pointer',
-                fontSize: '0.8rem'
-              }}
-            >
-              ⚖️ 두 모드 나란히 비교
-            </button>
+
+          {/* Lookback Period Selection */}
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>데이터 학습 기간 (Optimization Lookback)</label>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.2rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {(() => {
+              const currentYear = new Date().getFullYear();
+              let minYear = 1970;
+              if (coverageData && coverageData.common_start_date) {
+                const parts = coverageData.common_start_date.split('-');
+                if (parts.length > 0) {
+                  minYear = parseInt(parts[0], 10);
+                }
+              }
+              const years = Array.from(new Array(currentYear - minYear + 1), (val, index) => minYear + index).reverse();
+              let isRange = typeof lookback === 'string' && lookback.startsWith('range:');
+              let startYear = isRange ? lookback.split(':')[1] : minYear.toString();
+              let endYear = isRange ? lookback.split(':')[2] : currentYear.toString();
+
+              return (
+                <>
+                  <select 
+                    className="input" 
+                    value={isRange ? 'range' : lookback}
+                    onChange={(e) => {
+                      if (e.target.value === 'range') {
+                        handleLookbackChange(`range:${startYear}:${endYear}`);
+                      } else {
+                        handleLookbackChange(e.target.value);
+                      }
+                    }}
+                    style={{ flex: 1, minWidth: '150px' }}
+                  >
+                    <option value="1y">최근 1년 (1 Year)</option>
+                    <option value="3y">최근 3년 (3 Years)</option>
+                    <option value="5y">최근 5년 (5 Years)</option>
+                    <option value="10y">최근 10년 (10 Years)</option>
+                    <option value="20y">최근 20년 (20 Years)</option>
+                    <option value="30y">최근 30년 (30 Years)</option>
+                    <option value="max">전체 기간 (Max)</option>
+                    <option value="range">직접 지정 (Custom Range)</option>
+                  </select>
+
+                  {isRange && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <select 
+                        className="input" 
+                        value={startYear}
+                        onChange={(e) => handleLookbackChange(`range:${e.target.value}:${endYear}`)}
+                        style={{ width: '85px', padding: '6px' }}
+                      >
+                        {years.map(y => <option key={`start-${y}`} value={y}>{y}년</option>)}
+                      </select>
+                      <span style={{ fontWeight: 'bold', color: '#64748b' }}>~</span>
+                      <select 
+                        className="input" 
+                        value={endYear}
+                        onChange={(e) => handleLookbackChange(`range:${startYear}:${e.target.value}`)}
+                        style={{ width: '85px', padding: '6px' }}
+                      >
+                        {years.map(y => <option key={`end-${y}`} value={y}>{y}년</option>)}
+                      </select>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
+          
+
 
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem' }}>Lookback Period</label>

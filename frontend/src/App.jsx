@@ -10,6 +10,7 @@ function App() {
   const [sessions, setSessions] = useState([])
   const [currentSession, setCurrentSession] = useState(null)
   const [activeTab, setActiveTab] = useState('analysis') // analysis, optimization, backtest
+  const [tickerNames, setTickerNames] = useState({});
 
   useEffect(() => {
     loadSessions();
@@ -26,6 +27,19 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [currentSession]);
+
+  // Fetch ticker names when tickers change
+  useEffect(() => {
+    if (currentSession && currentSession.tickers && currentSession.tickers.length > 0) {
+      api.getTickerNames(currentSession.tickers).then(names => {
+        setTickerNames(names);
+      }).catch(err => {
+        console.error("Failed to fetch ticker names", err);
+      });
+    } else {
+      setTickerNames({});
+    }
+  }, [currentSession?.tickers]);
 
   const loadSessions = async () => {
     try {
@@ -90,12 +104,29 @@ function App() {
     }
   }
 
+  const handleDuplicateSession = async () => {
+    if (!currentSession) return;
+    const newName = prompt("Enter name for duplicated session:", `${currentSession.name} (Copy)`);
+    if (!newName || newName.trim() === '') return;
+    
+    try {
+      const newSession = await api.duplicateSession(currentSession.id, newName.trim());
+      setSessions([...sessions, newSession]);
+      setCurrentSession(newSession);
+      alert("Session duplicated successfully!");
+    } catch (err) {
+      console.error("Failed to duplicate session", err);
+      alert("Failed to duplicate session.");
+    }
+  }
+
   return (
     <div className="container">
       <div className="header">
         <h1>Portfolio Optimizer</h1>
         <div>
           <button className="btn" onClick={handleNewSession} style={{marginRight: '8px'}}>New Session</button>
+          {currentSession && <button className="btn" onClick={handleDuplicateSession} style={{marginRight: '8px', background: '#8b5cf6', color: '#fff'}}>Duplicate Session</button>}
           {currentSession && <button className="btn" onClick={handleSaveSession}>Save Session</button>}
         </div>
       </div>
@@ -192,18 +223,21 @@ function App() {
                 session={currentSession} 
                 setSession={setCurrentSession} 
                 onDeleteSession={handleDeleteSession}
+                tickerNames={tickerNames}
               />
             </div>
             <div style={{ display: activeTab === 'optimization' ? 'block' : 'none' }}>
               <OptimizationTab 
                 session={currentSession} 
                 setSession={setCurrentSession} 
+                tickerNames={tickerNames}
               />
             </div>
             <div style={{ display: activeTab === 'backtest' ? 'block' : 'none' }}>
               <BacktestTab 
                 session={currentSession} 
                 setSession={setCurrentSession} 
+                tickerNames={tickerNames}
               />
             </div>
           </div>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../api';
+import { formatTickerDisplay } from '../utils/formatters';
 
-export default function HistoricalCoverageCard({ tickers = [], proxies = {}, hedgedTickers = [] }) {
+export default function HistoricalCoverageCard({ tickers = [], proxies = {}, hedgedTickers = [], tickerNames = {} }) {
   const [coverage, setCoverage] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -110,6 +111,7 @@ export default function HistoricalCoverageCard({ tickers = [], proxies = {}, hed
                 const item = coverage.tickers?.[t] || {};
                 const isBottleneck = t === coverage.bottleneck_ticker;
                 const isHedged = hedgedTickers && hedgedTickers.includes(t);
+                const isDomestic = t.endsWith('.KS') || t.endsWith('.KQ');
 
                 return (
                   <tr 
@@ -120,7 +122,7 @@ export default function HistoricalCoverageCard({ tickers = [], proxies = {}, hed
                     }}
                   >
                     <td style={{ padding: '10px 12px', fontWeight: 'bold', color: isBottleneck ? '#b45309' : '#1e293b' }}>
-                      {t}
+                      {formatTickerDisplay(t, tickerNames)}
                       {isBottleneck && (
                         <span style={{ 
                           backgroundColor: '#fde68a', 
@@ -136,7 +138,18 @@ export default function HistoricalCoverageCard({ tickers = [], proxies = {}, hed
                       )}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      {isHedged ? (
+                      {isDomestic ? (
+                        <span style={{
+                          backgroundColor: '#dbeafe',
+                          color: '#1d4ed8',
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.8rem',
+                          fontWeight: 'bold'
+                        }}>
+                          🇰🇷 국내자산
+                        </span>
+                      ) : isHedged ? (
                         <span style={{ color: '#047857', fontWeight: '600' }}>🛡️ (H) 환헤지</span>
                       ) : (
                         <span style={{ color: '#64748b' }}>🌐 환노출</span>

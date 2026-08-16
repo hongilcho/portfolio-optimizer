@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../api';
 import Plot from 'react-plotly.js';
+import { formatTickerDisplay } from '../utils/formatters';
 
-export default function BacktestTab({ session, setSession }) {
+export default function BacktestTab({ session, setSession, tickerNames }) {
   const [result, setResult] = useState(session.constraints?.backtest_result || null);
   const [loading, setLoading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(session.constraints?.exchange_rate || 1400.0);
   const [fetchingRate, setFetchingRate] = useState(false);
   const [currency, setCurrency] = useState(session.constraints?.currency || 'KRW');
+  const [coverageData, setCoverageData] = useState(null);
 
   const [params, setParams] = useState(session.constraints?.backtest_params || {
     initial_capital: 10000000,
@@ -19,6 +21,16 @@ export default function BacktestTab({ session, setSession }) {
   useEffect(() => {
     fetchExchangeRate();
   }, []);
+
+  useEffect(() => {
+    if (session.tickers && session.tickers.length > 0) {
+      api.getPortfolioCoverage(session.tickers, session.constraints?.proxies || {})
+        .then(res => setCoverageData(res))
+        .catch(err => console.error(err));
+    } else {
+      setCoverageData(null);
+    }
+  }, [session.tickers, session.constraints?.proxies]);
 
   useEffect(() => {
     if (session.constraints?.backtest_result) {
@@ -56,7 +68,14 @@ export default function BacktestTab({ session, setSession }) {
     }
   };
 
-  const lookback = session.constraints?.lookback_period || '5y';
+  const lookback = session.constraints?.backtest_lookback_period || 'max';
+
+  const handleLookbackChange = (newVal) => {
+    setSession(prev => ({
+      ...prev,
+      constraints: { ...prev.constraints, backtest_lookback_period: newVal }
+    }));
+  };
 
   const handleRunBacktest = async () => {
     if (!session.tickers || session.tickers.length === 0) return alert("Please add tickers in Data & Analysis tab first.");
@@ -87,16 +106,16 @@ export default function BacktestTab({ session, setSession }) {
       
       setResult(fullResult);
       
-      setSession({
-        ...session,
+      setSession(prev => ({
+        ...prev,
         constraints: {
-          ...session.constraints,
+          ...prev.constraints,
           currency,
           exchange_rate: exchangeRate,
           backtest_params: params,
           backtest_result: fullResult
         }
-      });
+      }));
     } catch (err) {
       console.error(err);
       alert("Backtest failed. Check console.");
@@ -112,13 +131,13 @@ export default function BacktestTab({ session, setSession }) {
       [name]: isNaN(value) || value === '' ? value : parseFloat(value)
     };
     setParams(updatedParams);
-    setSession({
-      ...session,
+    setSession(prev => ({
+      ...prev,
       constraints: {
-        ...session.constraints,
+        ...prev.constraints,
         backtest_params: updatedParams
       }
-    });
+    }));
   };
 
   const handleCurrencyChange = (newCurr) => {
@@ -137,14 +156,14 @@ export default function BacktestTab({ session, setSession }) {
     const updatedParams = { ...params, initial_capital: newInit, dca_amount: newDca };
     setCurrency(newCurr);
     setParams(updatedParams);
-    setSession({
-      ...session,
+    setSession(prev => ({
+      ...prev,
       constraints: {
-        ...session.constraints,
+        ...prev.constraints,
         currency: newCurr,
         backtest_params: updatedParams
       }
-    });
+    }));
   };
 
   const formatKoreanCurrency = (val) => {
@@ -353,7 +372,7 @@ export default function BacktestTab({ session, setSession }) {
           data={traces}
           layout={{
             autosize: true,
-            margin: { l: 75, r: 20, t: 20, b: 40 },
+            margin: { l: currency === 'KRW' ? 120 : 80, r: 20, t: 20, b: 40 },
             legend: { orientation: 'h', y: -0.2 },
             yaxis: { 
               title: `Portfolio Value (${currSymbol})`, 
@@ -532,16 +551,28 @@ export default function BacktestTab({ session, setSession }) {
                   fontSize: '0.85rem'
                 }}
               >
-                <strong style={{ color: '#0f172a' }}>{t}</strong>
-                <span style={{
-                  fontSize: '0.75rem',
-                  padding: '1px 5px',
-                  borderRadius: '4px',
-                  background: isHedged ? '#ecfdf5' : '#f1f5f9',
-                  color: isHedged ? '#047857' : '#64748b'
-                }}>
-                  {isHedged ? '🛡️(H)' : '🌐환노출'}
-                </span>
+                <strong style={{ color: '#0f172a' }}>{formatTickerDisplay(t, tickerNames)}</strong>
+                {t.endsWith('.KS') || t.endsWith('.KQ') ? (
+                  <span style={{
+                    fontSize: '0.75rem',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    background: '#eff6ff',
+                    color: '#1d4ed8'
+                  }}>
+                    🇰🇷국내자산
+                  </span>
+                ) : (
+                  <span style={{
+                    fontSize: '0.75rem',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    background: isHedged ? '#ecfdf5' : '#f1f5f9',
+                    color: isHedged ? '#047857' : '#64748b'
+                  }}>
+                    {isHedged ? '🛡️(H)' : '🌐환노출'}
+                  </span>
+                )}
                 <span style={{ fontWeight: 'bold', color: '#2563eb' }}>
                   {percent}%
                 </span>
@@ -629,6 +660,81 @@ export default function BacktestTab({ session, setSession }) {
               🇺🇸 <strong>[달러 순수 백테스트]</strong>: 환율 변동의 개입 없이 미국 본토 달러 자산의 순수 주가 수익률로만 자산 가치를 시뮬레이션합니다.
             </span>
           )}
+        </div>
+
+        {/* Lookback Period Selection */}
+        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>데이터 적용 기간 (Backtest Lookback)</label>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.2rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {(() => {
+            const currentYear = new Date().getFullYear();
+            let minYear = 1970;
+            if (coverageData && coverageData.common_start_date) {
+              const parts = coverageData.common_start_date.split('-');
+              if (parts.length > 0) {
+                minYear = parseInt(parts[0], 10);
+              }
+            }
+            const years = Array.from(new Array(currentYear - minYear + 1), (val, index) => minYear + index).reverse();
+            let isRange = typeof lookback === 'string' && lookback.startsWith('range:');
+            let startYear = isRange ? lookback.split(':')[1] : minYear.toString();
+            let endYear = isRange ? lookback.split(':')[2] : currentYear.toString();
+
+            return (
+              <>
+                <select 
+                  className="input" 
+                  value={isRange ? 'range' : lookback}
+                  onChange={(e) => {
+                    if (e.target.value === 'range') {
+                      handleLookbackChange(`range:${startYear}:${endYear}`);
+                    } else {
+                      handleLookbackChange(e.target.value);
+                    }
+                  }}
+                  style={{ flex: 1, minWidth: '150px' }}
+                >
+                  <option value="max">최대 기간 (Max Available)</option>
+                  <option value="1y">최근 1년</option>
+                  <option value="3y">최근 3년</option>
+                  <option value="5y">최근 5년</option>
+                  <option value="10y">최근 10년</option>
+                  <option value="range">직접 지정 (Custom Range)</option>
+                </select>
+
+                {isRange && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <select
+                      className="input"
+                      value={startYear}
+                      onChange={(e) => {
+                        const newStart = parseInt(e.target.value);
+                        let newEnd = parseInt(endYear);
+                        if (newStart > newEnd) newEnd = newStart;
+                        handleLookbackChange(`range:${newStart}:${newEnd}`);
+                      }}
+                      style={{ width: '100px' }}
+                    >
+                      {years.map(y => <option key={y} value={y}>{y}년</option>)}
+                    </select>
+                    <span style={{ fontWeight: 'bold', color: '#64748b' }}>~</span>
+                    <select
+                      className="input"
+                      value={endYear}
+                      onChange={(e) => {
+                        const newEnd = parseInt(e.target.value);
+                        let newStart = parseInt(startYear);
+                        if (newEnd < newStart) newStart = newEnd;
+                        handleLookbackChange(`range:${newStart}:${newEnd}`);
+                      }}
+                      style={{ width: '100px' }}
+                    >
+                      {years.map(y => <option key={y} value={y}>{y}년</option>)}
+                    </select>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../api';
+import AutocompleteInput from './AutocompleteInput';
+import { formatTickerDisplay } from '../utils/formatters';
 
 export default function TickerManager({ 
   tickers, 
@@ -7,7 +9,8 @@ export default function TickerManager({
   proxies = {}, 
   setProxies,
   hedgedTickers = [],
-  setHedgedTickers
+  setHedgedTickers,
+  tickerNames
 }) {
   const [input, setInput] = useState('');
   const [activeProxyTicker, setActiveProxyTicker] = useState(null);
@@ -124,12 +127,19 @@ export default function TickerManager({
       
       {/* Ticker Add Form */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
-        <input 
-          className="input"
+        <AutocompleteInput 
           value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="e.g. QQQ, TLT, GLD, SCHD, PDBC"
-          onKeyDown={e => e.key === 'Enter' && handleAdd()}
+          onChange={setInput}
+          onSelect={(ticker) => {
+            if (ticker && !tickers.includes(ticker)) {
+              setTickers([...tickers, ticker]);
+              setInput('');
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleAdd();
+          }}
+          placeholder="e.g. QQQ, 삼성전자, AAPL"
         />
         <button className="btn" onClick={handleAdd}>Add</button>
       </div>
@@ -139,29 +149,47 @@ export default function TickerManager({
         {tickers.map(ticker => {
           const isHedged = hedgedTickers && hedgedTickers.includes(ticker);
           const tCoverage = coverage?.tickers?.[ticker];
+          const isDomestic = ticker.endsWith('.KS') || ticker.endsWith('.KQ');
 
           return (
             <div key={ticker} style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff' }}>
-              <span style={{ fontWeight: 'bold', minWidth: '60px', fontSize: '1rem', color: '#1e293b' }}>{ticker}</span>
+              <span style={{ fontWeight: 'bold', minWidth: '60px', fontSize: '1rem', color: '#1e293b' }}>
+                {formatTickerDisplay(ticker, tickerNames)}
+              </span>
               
               {/* Currency Hedging Badge Toggle */}
-              <button
-                type="button"
-                onClick={() => toggleHedge(ticker)}
-                title="클릭하여 환노출 / 환헤지(H) 전환"
-                style={{
+              {isDomestic ? (
+                <span style={{
                   fontSize: '0.8rem',
                   padding: '3px 10px',
                   borderRadius: '12px',
-                  border: isHedged ? '1px solid #10b981' : '1px solid #cbd5e1',
-                  background: isHedged ? '#ecfdf5' : '#f8fafc',
-                  color: isHedged ? '#047857' : '#64748b',
-                  fontWeight: isHedged ? 'bold' : 'normal',
-                  cursor: 'pointer'
-                }}
-              >
-                {isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출'}
-              </button>
+                  border: '1px solid #bfdbfe',
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  fontWeight: 'bold',
+                  cursor: 'default'
+                }}>
+                  🇰🇷 국내자산
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggleHedge(ticker)}
+                  title="클릭하여 환노출 / 환헤지(H) 전환"
+                  style={{
+                    fontSize: '0.8rem',
+                    padding: '3px 10px',
+                    borderRadius: '12px',
+                    border: isHedged ? '1px solid #10b981' : '1px solid #cbd5e1',
+                    background: isHedged ? '#ecfdf5' : '#f8fafc',
+                    color: isHedged ? '#047857' : '#64748b',
+                    fontWeight: isHedged ? 'bold' : 'normal',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출'}
+                </button>
+              )}
 
               {/* Proxy Badge */}
               {proxies[ticker] ? (
@@ -257,16 +285,20 @@ export default function TickerManager({
                   {/* Custom Proxy Input & Validation Box */}
                   <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input 
-                        className="input" 
-                        placeholder="직접 티커 입력 (예: GC=F, DBC, PCRAX, VUSTX, VDIGX)" 
+                      <AutocompleteInput 
+                        placeholder="직접 티커 입력 (예: 삼성전자, VUSTX)" 
                         value={customProxy}
-                        onChange={(e) => {
-                          setCustomProxy(e.target.value);
+                        onChange={(val) => {
+                          setCustomProxy(val);
                           setValidationResult(null);
                         }}
-                        onKeyDown={(e) => e.key === 'Enter' && handleValidate()}
-                        style={{ flex: 1, fontSize: '0.88rem' }}
+                        onSelect={(ticker) => {
+                          setCustomProxy(ticker);
+                          handleValidate(ticker);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleValidate();
+                        }}
                       />
                       <button 
                         className="btn" 

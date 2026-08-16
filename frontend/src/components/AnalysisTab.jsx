@@ -3,9 +3,10 @@ import * as api from '../api';
 import TickerManager from './TickerManager';
 import HistoricalCoverageCard from './HistoricalCoverageCard';
 import Plot from 'react-plotly.js';
+import { formatTickerDisplay } from '../utils/formatters';
 
 
-export default function AnalysisTab({ session, setSession, onDeleteSession }) {
+export default function AnalysisTab({ session, setSession, onDeleteSession, tickerNames }) {
   const [dualData, setDualData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lookback, setLookback] = useState(session.constraints?.lookback_period || '5y');
@@ -218,7 +219,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
               }}
               style={{ accentColor: '#2563eb' }}
             />
-            {t}
+            {formatTickerDisplay(t, tickerNames)}
           </label>
         );
       })}
@@ -246,23 +247,35 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
           <tbody>
             {tickers.map(t => {
               const isHedged = hedgedTickers.includes(t);
+              const isDomestic = t.endsWith('.KS') || t.endsWith('.KQ');
               return (
                 <tr key={t} style={{ borderBottom: '1px solid #e2e8f0' }}>
                   <td style={{ padding: '0.5rem' }}>
-                    <span style={{ fontWeight: 'bold' }}>{t}</span>
-                    {activeData.stats[t].name && <span style={{ color: '#64748b', marginLeft: '0.5rem', fontSize: '0.9em' }}>({activeData.stats[t].name})</span>}
-                    {proxies[t] && <span style={{ color: '#8b5cf6', marginLeft: '0.5rem', fontSize: '0.8em', backgroundColor: '#ede9fe', padding: '2px 6px', borderRadius: '4px' }}>Proxy: {proxies[t]}</span>}
+                    <span style={{ fontWeight: 'bold' }}>
+                      {isDomestic ? (
+                        <>
+                          {tickerNames && tickerNames[t] ? tickerNames[t] : t}
+                          {tickerNames && tickerNames[t] && <span style={{ fontSize: '0.85em', color: '#94a3b8', marginLeft: '4px', fontWeight: 'normal' }}>({t})</span>}
+                        </>
+                      ) : (
+                        <>
+                          {t}
+                          {tickerNames && tickerNames[t] && <span style={{ fontSize: '0.85em', color: '#94a3b8', marginLeft: '4px', fontWeight: 'normal' }}>({tickerNames[t]})</span>}
+                        </>
+                      )}
+                    </span>
+                    {proxies[t] && <span style={{ color: '#8b5cf6', marginLeft: '0.5rem', fontSize: '0.8em', backgroundColor: '#ede9fe', padding: '2px 6px', borderRadius: '4px' }}>Proxy: {formatTickerDisplay(proxies[t], tickerNames)}</span>}
                   </td>
                   <td style={{ padding: '0.5rem' }}>
                     <span style={{
                       fontSize: '0.8rem',
                       padding: '2px 8px',
                       borderRadius: '12px',
-                      background: isHedged ? '#ecfdf5' : '#f1f5f9',
-                      color: isHedged ? '#047857' : '#475569',
-                      fontWeight: isHedged ? 'bold' : 'normal'
+                      background: isDomestic ? '#dbeafe' : (isHedged ? '#ecfdf5' : '#f1f5f9'),
+                      color: isDomestic ? '#1d4ed8' : (isHedged ? '#047857' : '#475569'),
+                      fontWeight: (isDomestic || isHedged) ? 'bold' : 'normal'
                     }}>
-                      {isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출'}
+                      {isDomestic ? '🇰🇷 국내자산' : (isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출')}
                     </span>
                   </td>
                   <td style={{ padding: '0.5rem' }}>{(activeData.stats[t].cagr * 100).toFixed(2)}%</td>
@@ -315,29 +328,30 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
                 const item = fxStats.tickers[t];
                 const isHedged = item.is_hedged;
                 const isCushion = item.vol_diff < 0;
-
+                const isDomestic = t.endsWith('.KS') || t.endsWith('.KQ');
+                
                 return (
                   <tr key={t} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                    <td style={{ padding: '0.6rem', fontWeight: 'bold' }}>{t}</td>
+                    <td style={{ padding: '0.6rem', fontWeight: 'bold' }}>{formatTickerDisplay(t, tickerNames)}</td>
                     <td style={{ padding: '0.6rem' }}>
                       <span style={{
                         fontSize: '0.8rem',
                         padding: '2px 8px',
                         borderRadius: '12px',
-                        background: isHedged ? '#ecfdf5' : '#f1f5f9',
-                        color: isHedged ? '#047857' : '#475569',
-                        fontWeight: isHedged ? 'bold' : 'normal'
+                        background: isDomestic ? '#dbeafe' : (isHedged ? '#ecfdf5' : '#f1f5f9'),
+                        color: isDomestic ? '#1d4ed8' : (isHedged ? '#047857' : '#475569'),
+                        fontWeight: (isDomestic || isHedged) ? 'bold' : 'normal'
                       }}>
-                        {isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출'}
+                        {isDomestic ? '🇰🇷 국내자산' : (isHedged ? '🛡️ (H) 환헤지' : '🌐 환노출')}
                       </span>
                     </td>
-                    <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: item.corr_with_fx < 0 ? '#10b981' : '#f59e0b' }}>
-                      {item.corr_with_fx.toFixed(2)}
+                    <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: (isDomestic || isHedged) ? '#94a3b8' : (item.corr_with_fx < 0 ? '#10b981' : '#f59e0b') }}>
+                      {isDomestic ? '-' : item.corr_with_fx.toFixed(2)}
                     </td>
                     <td style={{ padding: '0.6rem', textAlign: 'right' }}>{(item.vol_usd * 100).toFixed(1)}%</td>
                     <td style={{ padding: '0.6rem', textAlign: 'right' }}>{(item.vol_krw * 100).toFixed(1)}%</td>
-                    <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: isHedged ? '#64748b' : (isCushion ? '#10b981' : '#f59e0b') }}>
-                      {isHedged ? '0.0%p (헤지됨)' : `${(item.vol_diff * 100).toFixed(1)}%p ${isCushion ? '(변동성 완화)' : '(변동성 증가)'}`}
+                    <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold', color: (isDomestic || isHedged) ? '#94a3b8' : (isCushion ? '#10b981' : '#f59e0b') }}>
+                      {isDomestic ? 'N/A (원화 자산)' : (isHedged ? '0.0%p (헤지됨)' : `${(item.vol_diff * 100).toFixed(1)}%p ${isCushion ? '(변동성 완화)' : '(변동성 증가)'}`)}
                     </td>
                     <td style={{ padding: '0.6rem', textAlign: 'right', color: '#ef4444' }}>{(item.mdd_usd * 100).toFixed(1)}%</td>
                     <td style={{ padding: '0.6rem', textAlign: 'right', color: '#ef4444' }}>{(item.mdd_krw * 100).toFixed(1)}%</td>
@@ -374,7 +388,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
             <tr>
               <th rowSpan="2" style={{ padding: '0.5rem', borderBottom: '2px solid #e2e8f0', textAlign: 'left', minWidth: '80px' }}>Year</th>
               {tickers.map(t => (
-                <th colSpan="2" key={t} style={{ padding: '0.5rem', borderBottom: '1px solid #e2e8f0', textAlign: 'center', borderLeft: '1px solid #e2e8f0' }}>{t}</th>
+                <th colSpan="2" key={t} style={{ padding: '0.5rem', borderBottom: '1px solid #e2e8f0', textAlign: 'center', borderLeft: '1px solid #e2e8f0' }}>{formatTickerDisplay(t, tickerNames)}</th>
               ))}
             </tr>
             <tr>
@@ -419,10 +433,12 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
     if (!activeData || !activeData.stats) return null;
 
     const corrTickers = Object.keys(activeData.correlation_matrix || {});
+    const formattedCorrTickers = corrTickers.map(t => formatTickerDisplay(t, tickerNames));
     const corrZ = corrTickers.map(t1 => corrTickers.map(t2 => activeData.correlation_matrix[t1][t2]));
     const corrText = corrZ.map(row => row.map(val => (val !== undefined && val !== null) ? val.toFixed(2) : ''));
 
     const covTickers = Object.keys(activeData.covariance_matrix || {});
+    const formattedCovTickers = covTickers.map(t => formatTickerDisplay(t, tickerNames));
     const covZ = covTickers.map(t1 => covTickers.map(t2 => activeData.covariance_matrix[t1][t2]));
 
     const tickers = Object.keys(activeData.stats);
@@ -448,7 +464,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
       return {
         x: filteredYearsRet,
         y: yVals,
-        name: ticker,
+        name: formatTickerDisplay(ticker, tickerNames),
         type: 'bar',
         ...(showRetLabels ? {
           text: yVals.map(v => v !== null && v !== undefined ? `${v}%` : ''),
@@ -469,7 +485,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
       return {
         x: filteredYearsVol,
         y: yVals,
-        name: ticker,
+        name: formatTickerDisplay(ticker, tickerNames),
         type: 'bar',
         ...(showVolLabels ? {
           text: yVals.map(v => v !== null && v !== undefined ? `${v}%` : ''),
@@ -507,7 +523,7 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
         y: rebasedY,
         type: 'scatter',
         mode: 'lines',
-        name: ticker
+        name: formatTickerDisplay(ticker, tickerNames)
       };
     });
     const allCumValues = lineData.flatMap(t => t.y);
@@ -521,8 +537,8 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
             <Plot
               data={[{
                 z: corrZ,
-                x: corrTickers,
-                y: corrTickers,
+                x: formattedCorrTickers,
+                y: formattedCorrTickers,
                 text: corrText,
                 texttemplate: "%{text}",
                 textfont: { size: 12 },
@@ -543,8 +559,8 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
             <Plot
               data={[{
                 z: covZ,
-                x: covTickers,
-                y: covTickers,
+                x: formattedCovTickers,
+                y: formattedCovTickers,
                 type: 'heatmap',
                 colorscale: 'Viridis'
               }]}
@@ -638,11 +654,12 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
         <div style={{ flex: 1.5, minWidth: '320px' }}>
           <TickerManager 
             tickers={session.tickers} 
-            setTickers={(newTickers) => setSession({...session, tickers: newTickers})}
+            setTickers={(newTickers) => setSession(prev => ({...prev, tickers: newTickers}))}
             proxies={proxies}
-            setProxies={(newProxies) => setSession({...session, constraints: {...session.constraints, proxies: newProxies}})} 
+            setProxies={(newProxies) => setSession(prev => ({...prev, constraints: {...prev.constraints, proxies: newProxies}}))} 
             hedgedTickers={hedgedTickers}
-            setHedgedTickers={(newHedged) => setSession({...session, constraints: {...session.constraints, hedged_tickers: newHedged}})}
+            setHedgedTickers={(newHedged) => setSession(prev => ({...prev, constraints: {...prev.constraints, hedged_tickers: newHedged}}))}
+            tickerNames={tickerNames}
           />
         </div>
 
@@ -707,9 +724,10 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
       </div>
 
       <HistoricalCoverageCard 
-        tickers={session.tickers} 
-        proxies={proxies} 
-        hedgedTickers={hedgedTickers} 
+        tickers={session.tickers}
+        proxies={proxies}
+        hedgedTickers={session.hedged_tickers || []}
+        tickerNames={tickerNames}
       />
 
       {loading && <p style={{ marginTop: '1rem', textAlign: 'center' }}>Loading analysis data...</p>}

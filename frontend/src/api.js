@@ -30,9 +30,20 @@ export const deleteSession = async (id) => {
   return response.data;
 };
 
+export const duplicateSession = async (id, newName) => {
+  const response = await api.post(`/sessions/${id}/duplicate`, { name: newName });
+  return response.data;
+};
+
 
 export const getProxyRecommendations = async (ticker) => {
   const response = await api.get(`/proxy/recommendations?ticker=${ticker}`);
+  return response.data;
+};
+
+export const searchTickers = async (query) => {
+  if (!query || query.trim() === '') return [];
+  const response = await api.get(`/tickers/search?q=${encodeURIComponent(query.trim())}`);
   return response.data;
 };
 
@@ -108,4 +119,9 @@ export const clearChatHistory = async (sessionId) => {
   return response.data;
 };
 
-
+export const getTickerNames = async (tickers) => {
+  if (!tickers || tickers.length === 0) return {};
+  const q = tickers.join(',');
+  const response = await api.get(`/tickers/names?q=${q}`);
+  return response.data;
+};

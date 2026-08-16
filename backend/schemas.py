@@ -13,6 +13,9 @@ class SessionCreate(SessionBase):
 class SessionUpdate(SessionBase):
     pass
 
+class SessionDuplicateRequest(BaseModel):
+    name: str
+
 class SessionResponse(SessionBase):
     id: int
     created_at: str
@@ -101,6 +104,7 @@ class DualAnalyzeResponse(BaseModel):
     usd: AnalyzeResponse
     krw: AnalyzeResponse
     fx_cushion: FXCushionResponse
+    ticker_names: Dict[str, str] = {}
 
 class BacktestParams(BaseRequest):
     weights: Dict[str, float]

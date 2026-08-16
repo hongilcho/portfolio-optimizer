@@ -312,16 +312,27 @@ def fetch_dual_currency_data(
     else:
         fx_series = pd.Series(1400.0, index=data_usd.index)
 
-    # 4. Construct KRW prices
+    # 4. Construct KRW and USD prices
     data_krw = pd.DataFrame(index=data_usd.index)
+    
+    # We must treat data_usd as raw_data for now, and fix it inline
     for t in data_usd.columns:
-        if t in hedged_tickers:
-            usd_ret = data_usd[t].pct_change(fill_method=None).fillna(0)
-            initial_krw_price = data_usd[t].iloc[0] * fx_series.iloc[0]
-            data_krw[t] = initial_krw_price * (1 + usd_ret).cumprod()
+        is_krw_native = t.endswith('.KS') or t.endswith('.KQ')
+        
+        if is_krw_native:
+            # The raw data is already in KRW
+            data_krw[t] = data_usd[t]
+            # Convert KRW to USD for data_usd
+            data_usd[t] = data_usd[t] / fx_series
         else:
-            data_krw[t] = data_usd[t] * fx_series
+            # The raw data is in USD
+            if t in hedged_tickers:
+                usd_ret = data_usd[t].pct_change(fill_method=None).fillna(0)
+                initial_krw_price = data_usd[t].iloc[0] * fx_series.iloc[0]
+                data_krw[t] = initial_krw_price * (1 + usd_ret).cumprod()
+            else:
+                # Unhedged: Multiply by exchange rate
+                data_krw[t] = data_usd[t] * fx_series
 
+    data_krw.attrs = getattr(data_usd, 'attrs', {})
     return data_usd, data_krw, fx_series
-
-
