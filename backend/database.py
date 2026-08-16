@@ -9,8 +9,13 @@ load_dotenv(dotenv_path=env_path)
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://postgres.ugdktlbidiehftyucuhv:2DFtxw.2Fbqhu5r@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres"
+    "postgresql://postgres.ugdktlbidiehftyucuhv:2DFtxw.2Fbqhu5r@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres?sslmode=require"
 )
+
+# Ensure sslmode=require for PostgreSQL connections (required for Render -> Supabase)
+if not DATABASE_URL.startswith("sqlite") and "sslmode" not in DATABASE_URL:
+    delimiter = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL = f"{DATABASE_URL}{delimiter}sslmode=require"
 
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -20,6 +25,7 @@ else:
         pool_pre_ping=True,
         pool_recycle=300
     )
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
