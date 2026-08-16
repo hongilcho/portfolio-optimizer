@@ -281,7 +281,6 @@ def fetch_historical_data(tickers: List[str], period: str = "5y", proxies: Dict[
         return pd.DataFrame()
 
 def fetch_dual_currency_data(
-
     tickers: List[str], 
     period: str = "5y", 
     proxies: Dict[str, str] = None, 
@@ -298,28 +297,31 @@ def fetch_dual_currency_data(
     if hedged_tickers is None:
         hedged_tickers = []
 
-    # Fetch tickers + proxies + USDKRW=X
-    all_needed = list(set(tickers + list(proxies.values()) + ["USDKRW=X"]))
-    
-    raw_data = fetch_historical_data(all_needed, period=period, proxies=proxies)
-    if raw_data.empty:
+    # 1. Fetch pure asset prices (USD) with full lookback
+    data_usd = fetch_historical_data(tickers, period=period, proxies=proxies)
+    if data_usd.empty:
         return pd.DataFrame(), pd.DataFrame(), pd.Series(dtype=float)
-        
-    fx_series = raw_data["USDKRW=X"] if "USDKRW=X" in raw_data.columns else pd.Series(1400.0, index=raw_data.index)
+
+    # 2. Fetch USDKRW=X exchange rate
+    fx_raw = fetch_historical_data(["USDKRW=X"], period=period)
     
-    avail_tickers = [t for t in tickers if t in raw_data.columns and t != "USDKRW=X"]
-    data_usd = raw_data[avail_tickers].copy()
-    
+    # 3. Align FX series to data_usd.index (do not drop asset history before 2003)
+    if not fx_raw.empty and "USDKRW=X" in fx_raw.columns:
+        fx_aligned = fx_raw["USDKRW=X"].reindex(data_usd.index)
+        fx_series = fx_aligned.ffill().bfill()
+    else:
+        fx_series = pd.Series(1400.0, index=data_usd.index)
+
+    # 4. Construct KRW prices
     data_krw = pd.DataFrame(index=data_usd.index)
-    for t in avail_tickers:
+    for t in data_usd.columns:
         if t in hedged_tickers:
-            # Currency-hedged: purely follows USD returns
-            usd_ret = data_usd[t].pct_change().fillna(0)
+            usd_ret = data_usd[t].pct_change(fill_method=None).fillna(0)
             initial_krw_price = data_usd[t].iloc[0] * fx_series.iloc[0]
             data_krw[t] = initial_krw_price * (1 + usd_ret).cumprod()
         else:
-            # Unhedged: tracks USD price * FX rate
             data_krw[t] = data_usd[t] * fx_series
-            
+
     return data_usd, data_krw, fx_series
+
 
