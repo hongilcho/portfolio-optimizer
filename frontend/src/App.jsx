@@ -9,6 +9,7 @@ import MethodologyTab from './components/MethodologyTab'
 
 function App() {
   const [sessions, setSessions] = useState([])
+  const [loadingSessions, setLoadingSessions] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
   const [activeTab, setActiveTab] = useState('analysis') // analysis, optimization, backtest
   const [tickerNames, setTickerNames] = useState({});
@@ -43,11 +44,14 @@ function App() {
   }, [currentSession?.tickers]);
 
   const loadSessions = async () => {
+    setLoadingSessions(true);
     try {
       const data = await api.getSessions();
       setSessions(data);
     } catch (err) {
       console.error("Failed to load sessions", err);
+    } finally {
+      setLoadingSessions(false);
     }
   }
 
@@ -204,8 +208,34 @@ function App() {
         <div className="card">
           <h2>Your Sessions</h2>
 
-          {sessions.length === 0 ? (
-            <p>No sessions found. Create a new one to get started.</p>
+          {loadingSessions ? (
+            <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#64748b' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                border: '3px solid #e2e8f0',
+                borderTop: '3px solid var(--primary-color, #2563eb)',
+                borderRadius: '50%',
+                margin: '0 auto 1rem auto',
+                animation: 'spin 0.8s linear infinite'
+              }} />
+              <style>{`
+                @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
+              <p style={{ fontWeight: '600', fontSize: '1.05rem', color: '#334155', margin: '0 0 6px 0' }}>
+                클라우드 데이터베이스로부터 세션 목록을 불러오는 중입니다...
+              </p>
+              <p style={{ fontSize: '0.88rem', color: '#94a3b8', margin: 0 }}>
+                잠시만 기다려 주세요. Supabase DB와 동기화 중입니다.
+              </p>
+            </div>
+          ) : sessions.length === 0 ? (
+            <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748b' }}>
+              <p style={{ fontSize: '1rem', marginBottom: '1rem' }}>저장된 세션이 없습니다. 상단의 'New Session' 버튼을 눌러 새로운 포트폴리오를 만들어 보세요.</p>
+            </div>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0 }}>
               {sessions.map(session => (
