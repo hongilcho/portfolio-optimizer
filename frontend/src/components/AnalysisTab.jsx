@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../api';
 import TickerManager from './TickerManager';
+import HistoricalCoverageCard from './HistoricalCoverageCard';
 import Plot from 'react-plotly.js';
+
 
 export default function AnalysisTab({ session, setSession, onDeleteSession }) {
   const [dualData, setDualData] = useState(null);
@@ -704,7 +706,14 @@ export default function AnalysisTab({ session, setSession, onDeleteSession }) {
         </div>
       </div>
 
+      <HistoricalCoverageCard 
+        tickers={session.tickers} 
+        proxies={proxies} 
+        hedgedTickers={hedgedTickers} 
+      />
+
       {loading && <p style={{ marginTop: '1rem', textAlign: 'center' }}>Loading analysis data...</p>}
+
       
       {renderStatsTable()}
       {renderFXCushionCard()}

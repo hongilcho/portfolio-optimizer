@@ -165,8 +165,10 @@ def get_portfolio_coverage(tickers: List[str], proxies: Dict[str, str] = None) -
             orig_days = (pd.to_datetime('today') - pd.to_datetime(t_first)).days if t_first else 0
             eff_days = (pd.to_datetime('today') - pd.to_datetime(effective_start)).days if effective_start else 0
             
-            ext_years = round((eff_days - orig_days) / 365.25, 1) if ext_days > 0 else 0.0
+            ext_days = eff_days - orig_days
+            ext_years = round(ext_days / 365.25, 1) if ext_days > 0 else 0.0
             tot_years = round(eff_days / 365.25, 1)
+
 
             coverage_details[t] = {
                 "ticker": t,
