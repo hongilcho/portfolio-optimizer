@@ -27,7 +27,79 @@ with engine.connect() as conn:
     except Exception:
         pass
 
+def _seed_initial_sessions():
+    db = SessionLocal()
+    try:
+        count = db.query(models.PortfolioSession).count()
+        if count == 0:
+            sample_sessions = [
+                {
+                    "name": "🇺🇸 미국 자산배분 & 올웨더 (QQQ, TLT, GLD, SCHD, PDBC)",
+                    "tickers": ["QQQ", "TLT", "PDBC", "GLD", "SCHD"],
+                    "constraints": {
+                        "lookback_period": "max",
+                        "perspective": "USD",
+                        "objective": "max_sharpe",
+                        "proxies": {
+                            "TLT": "VUSTX",
+                            "PDBC": "DBC",
+                            "GLD": "GC=F",
+                            "SCHD": "VDIGX"
+                        },
+                        "hedged_tickers": ["TLT"],
+                        "min_weights": {},
+                        "max_weights": {}
+                    }
+                },
+                {
+                    "name": "🌐 글로벌 60/40 전통 배분 (SPY, BND, VEA, VWO)",
+                    "tickers": ["SPY", "BND", "VEA", "VWO"],
+                    "constraints": {
+                        "lookback_period": "10y",
+                        "perspective": "USD",
+                        "objective": "max_sharpe",
+                        "proxies": {"BND": "AGG", "VEA": "EFA", "VWO": "EEM"},
+                        "hedged_tickers": [],
+                        "min_weights": {},
+                        "max_weights": {}
+                    }
+                },
+                {
+                    "name": "🇰🇷 한국형 달러-원 하이브리드 (KODEX 200, SPY, TLT, GLD)",
+                    "tickers": ["069500.KS", "SPY", "TLT", "GLD"],
+                    "constraints": {
+                        "lookback_period": "10y",
+                        "perspective": "KRW",
+                        "objective": "max_sharpe",
+                        "proxies": {"TLT": "VUSTX", "GLD": "GC=F"},
+                        "hedged_tickers": ["TLT"],
+                        "min_weights": {},
+                        "max_weights": {}
+                    }
+                }
+            ]
+            now = datetime.now().isoformat()
+            for s in sample_sessions:
+                sess = models.PortfolioSession(
+                    name=s["name"],
+                    tickers=json.dumps(s["tickers"]),
+                    constraints=json.dumps(s["constraints"]),
+                    chat_history=json.dumps([]),
+                    created_at=now,
+                    updated_at=now
+                )
+                db.add(sess)
+            db.commit()
+            print("Seeded default sample sessions successfully.")
+    except Exception as e:
+        print(f"Error seeding sessions: {e}")
+    finally:
+        db.close()
+
+_seed_initial_sessions()
+
 app = FastAPI(title="Portfolio Optimizer API")
+
 
 # Setup CORS for Frontend
 app.add_middleware(
