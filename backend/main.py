@@ -119,7 +119,7 @@ def update_session(session_id: int, session: schemas.SessionUpdate, db: Session 
     s.name = session.name
     s.tickers = json.dumps(session.tickers)
     s.constraints = json.dumps(session.constraints)
-    if session.chat_history is not None:
+    if session.chat_history is not None and len(session.chat_history) > 0:
         s.chat_history = json.dumps(session.chat_history)
     s.updated_at = datetime.now().isoformat()
     
@@ -192,10 +192,9 @@ def get_portfolio_coverage(request: schemas.BaseRequest):
 def search_tickers(q: str):
     return search_service.search_tickers(q)
 
-@app.get("/tickers/names")
-def get_ticker_names(q: str):
-    tickers = [t.strip() for t in q.split(",") if t.strip()]
-    return search_service.get_ticker_names(tickers)
+@app.post("/tickers/names")
+def get_ticker_names(request: schemas.BaseRequest):
+    return search_service.get_ticker_names(request.tickers)
 
 @app.post("/analyze", response_model=schemas.DualAnalyzeResponse)
 def analyze(request: schemas.BaseRequest):

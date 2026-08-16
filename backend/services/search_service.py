@@ -31,6 +31,11 @@ def _background_load():
         except Exception as e:
             print(f"Failed to load {m}: {e}")
 
+    # Progressively update cache so KRX is instantly available
+    with _cache_lock:
+        _cached_tickers.extend(temp_tickers)
+        temp_tickers = []
+
     # Load US Markets and ETF/US
     for m in ['NASDAQ', 'NYSE', 'AMEX', 'ETF/US']:
         try:
@@ -43,7 +48,7 @@ def _background_load():
             print(f"Failed to load {m}: {e}")
 
     with _cache_lock:
-        _cached_tickers = temp_tickers
+        _cached_tickers.extend(temp_tickers)
         _loaded = True
         _loading = False
     print(f"Ticker search cache loaded with {len(_cached_tickers)} symbols.")
@@ -83,6 +88,19 @@ def search_tickers(query: str, limit: int = 10):
     return results
 
 def get_ticker_names(tickers):
+    import time
+    wait_time = 0
+    
     with _cache_lock:
         t_map = {t['symbol']: t['name'] for t in _cached_tickers}
+        
+    all_found = all(t in t_map for t in tickers)
+    
+    while not all_found and not _loaded and wait_time < 15:
+        time.sleep(1)
+        wait_time += 1
+        with _cache_lock:
+            t_map = {t['symbol']: t['name'] for t in _cached_tickers}
+        all_found = all(t in t_map for t in tickers)
+        
     return {t: t_map.get(t, t) for t in tickers}

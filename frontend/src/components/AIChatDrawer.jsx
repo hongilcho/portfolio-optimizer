@@ -111,7 +111,7 @@ export default function AIChatDrawer({ session }) {
   };
 
   const handleFallbackToFlash = () => {
-    setSelectedModel('gemini-2.5-flash');
+    setSelectedModel('gemini-3.5-flash');
     setQuotaWarning(null);
     handleSendMessage("이어서 계속 분석 및 상담을 진행해줘.");
   };

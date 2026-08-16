@@ -30,6 +30,8 @@ def optimize_portfolio(data: pd.DataFrame, constraints: Dict[str, Any], objectiv
     
     ef = EfficientFrontier(mu, S, weight_bounds=(min_b, max_b))
     
+    risk_free_rate = float(constraints.get("risk_free_rate", 0.02))
+    
     target_volatility = constraints.get("target_volatility", 0.0)
     
     if target_volatility > 0:
@@ -37,19 +39,19 @@ def optimize_portfolio(data: pd.DataFrame, constraints: Dict[str, Any], objectiv
             raw_weights = ef.efficient_risk(target_volatility)
         except Exception:
             # Fallback
-            raw_weights = ef.max_sharpe() if objective == "max_sharpe" else ef.min_volatility()
+            raw_weights = ef.max_sharpe(risk_free_rate=risk_free_rate) if objective == "max_sharpe" else ef.min_volatility()
     else:
         if objective == "min_volatility":
             raw_weights = ef.min_volatility()
         else:
-            raw_weights = ef.max_sharpe()
+            raw_weights = ef.max_sharpe(risk_free_rate=risk_free_rate)
         
     cleaned_weights = ef.clean_weights()
-    expected_return, volatility, sharpe_ratio = ef.portfolio_performance()
+    expected_return, volatility, sharpe_ratio = ef.portfolio_performance(risk_free_rate=risk_free_rate)
 
     return cleaned_weights, expected_return, volatility, sharpe_ratio, correlation_matrix
 
-def calculate_portfolio_performance(data: pd.DataFrame, weights: Dict[str, float]) -> Tuple[float, float, float]:
+def calculate_portfolio_performance(data: pd.DataFrame, weights: Dict[str, float], risk_free_rate: float = 0.02) -> Tuple[float, float, float]:
     """
     Calculates expected return, volatility, and sharpe ratio for custom weights.
     """
@@ -65,7 +67,7 @@ def calculate_portfolio_performance(data: pd.DataFrame, weights: Dict[str, float
         
     exp_return = float(np.sum(weight_vec * mu.values))
     volatility = float(np.sqrt(np.dot(weight_vec.T, np.dot(S.values, weight_vec))))
-    risk_free_rate = 0.02
+    # Calculate Sharpe Ratio manually using dynamic risk_free_rate
     sharpe_ratio = float((exp_return - risk_free_rate) / volatility) if volatility > 0 else 0.0
     
     return exp_return, volatility, sharpe_ratio
@@ -81,12 +83,14 @@ def optimize_portfolio_dual(
     Also evaluates cross-currency performance for both optimal portfolios.
     """
     # 1. Optimize on USD Base
+    risk_free_rate = float(constraints.get("risk_free_rate", 0.02))
+
     usd_weights, usd_exp_ret, usd_vol, usd_sharpe, _ = optimize_portfolio(data_usd, constraints, objective)
-    usd_in_krw_ret, usd_in_krw_vol, usd_in_krw_sharpe = calculate_portfolio_performance(data_krw, usd_weights)
-    
+    usd_in_krw_ret, usd_in_krw_vol, usd_in_krw_sharpe = calculate_portfolio_performance(data_krw, usd_weights, risk_free_rate)
+
     # 2. Optimize on KRW Base
     krw_weights, krw_exp_ret, krw_vol, krw_sharpe, _ = optimize_portfolio(data_krw, constraints, objective)
-    krw_in_usd_ret, krw_in_usd_vol, krw_in_usd_sharpe = calculate_portfolio_performance(data_usd, krw_weights)
+    krw_in_usd_ret, krw_in_usd_vol, krw_in_usd_sharpe = calculate_portfolio_performance(data_usd, krw_weights, risk_free_rate)
     
     # Weight differences
     all_tickers = list(data_usd.columns)

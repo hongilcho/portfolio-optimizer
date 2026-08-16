@@ -15,7 +15,7 @@ export const createSession = async (name) => {
   const response = await api.post('/sessions/', {
     name,
     tickers: [],
-    constraints: { min_weight: 0, max_weight: 1.0, target_volatility: 0 }
+    constraints: { min_weight: 0, max_weight: 1.0, target_volatility: 0, risk_free_rate: 0.02 }
   });
   return response.data;
 };
@@ -121,7 +121,6 @@ export const clearChatHistory = async (sessionId) => {
 
 export const getTickerNames = async (tickers) => {
   if (!tickers || tickers.length === 0) return {};
-  const q = tickers.join(',');
-  const response = await api.get(`/tickers/names?q=${q}`);
+  const response = await api.post('/tickers/names', { tickers });
   return response.data;
 };

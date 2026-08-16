@@ -4,6 +4,7 @@ import AnalysisTab from './components/AnalysisTab'
 import OptimizationTab from './components/OptimizationTab'
 import BacktestTab from './components/BacktestTab'
 import AIChatDrawer from './components/AIChatDrawer'
+import MethodologyTab from './components/MethodologyTab'
 
 
 function App() {
@@ -215,6 +216,13 @@ function App() {
             >
               Backtest
             </button>
+            <button 
+              className={`tab-btn ${activeTab === 'methodology' ? 'active' : ''}`}
+              style={{padding: '1rem', background: 'none', border: 'none', borderBottom: activeTab === 'methodology' ? '2px solid var(--primary-color)' : 'none', color: activeTab === 'methodology' ? 'var(--primary-color)' : '#64748b', fontWeight: 'bold', cursor: 'pointer', marginBottom: '-2px'}}
+              onClick={() => setActiveTab('methodology')}
+            >
+              Methodology
+            </button>
           </div>
 
           <div>
@@ -239,6 +247,9 @@ function App() {
                 setSession={setCurrentSession} 
                 tickerNames={tickerNames}
               />
+            </div>
+            <div style={{ display: activeTab === 'methodology' ? 'block' : 'none' }}>
+              <MethodologyTab />
             </div>
           </div>
 

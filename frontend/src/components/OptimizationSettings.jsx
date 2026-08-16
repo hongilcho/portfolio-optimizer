@@ -103,6 +103,22 @@ export default function OptimizationSettings({ tickers = [], constraints = {}, s
           }} 
         />
       </div>
+      <div style={{ marginTop: '1rem' }}>
+        <label style={{ display: 'block', marginBottom: '0.5rem' }}>무위험수익률 (Risk-Free Rate, %, 디폴트 2%)</label>
+        <input 
+          className="input"
+          type="number" 
+          name="risk_free_rate" 
+          step="0.1"
+          min="0"
+          value={toPercent(constraints.risk_free_rate !== undefined ? constraints.risk_free_rate : 0.02)} 
+          onChange={e => {
+            let parsed = parseFloat(e.target.value);
+            if (isNaN(parsed)) parsed = 0;
+            setConstraints({ ...constraints, risk_free_rate: parsed / 100 });
+          }} 
+        />
+      </div>
     </div>
   );
 }

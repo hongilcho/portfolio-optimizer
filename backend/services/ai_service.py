@@ -5,8 +5,12 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 
-env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
+backend_env = Path(__file__).resolve().parent.parent / ".env"
+root_env = Path(__file__).resolve().parent.parent.parent / ".env"
+if backend_env.exists():
+    load_dotenv(dotenv_path=backend_env)
+if root_env.exists():
+    load_dotenv(dotenv_path=root_env)
 
 
 DEFAULT_MODEL = "gemini-3.7-flash"
@@ -155,68 +159,88 @@ def generate_chat_response(
         "parts": [{"text": prompt_with_context}]
     })
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-    payload = {
-        "contents": contents,
-        "systemInstruction": {
-            "parts": [{"text": SYSTEM_INSTRUCTION}]
-        },
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 2048,
-        }
-    }
+    # Candidate models for fallback if primary experiences temporary 503 overload
+    fallback_models = [model_name]
+    for alt in ["gemini-3.5-flash", "gemini-flash-latest"]:
+        if alt not in fallback_models:
+            fallback_models.append(alt)
 
-    try:
-        response = requests.post(url, json=payload, timeout=40)
-        
-        # Handle Rate Limit / Quota Exceeded (429)
-        if response.status_code == 429:
-            return {
-                "success": False,
-                "error_type": "QUOTA_EXCEEDED",
-                "model_used": model_name,
-                "message": f"⚠️ 오늘의 {model_name} 무료 요청 한도에 도달했습니다. 추가 요금 청구 없이 안전하게 차단되었습니다. 일일 1,500회 무료인 'Gemini 2.5 Flash' 모델로 전환하여 상담을 계속하실 수 있습니다."
+    last_error_msg = ""
+    last_status = 500
+
+    for current_model in fallback_models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={api_key}"
+        payload = {
+            "contents": contents,
+            "systemInstruction": {
+                "parts": [{"text": SYSTEM_INSTRUCTION}]
+            },
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 2048,
             }
-        
-        if response.status_code != 200:
-            err_data = {}
+        }
+
+        # Try up to 2 times for transient network/503 issues
+        for attempt in range(2):
             try:
-                err_data = response.json()
-            except Exception:
-                pass
-            err_msg = err_data.get("error", {}).get("message", response.text)
-            return {
-                "success": False,
-                "error_type": "API_ERROR",
-                "message": f"Gemini API 오류 ({response.status_code}): {err_msg}"
-            }
+                response = requests.post(url, json=payload, timeout=35)
+                
+                # Handle Rate Limit / Quota Exceeded (429)
+                if response.status_code == 429:
+                    return {
+                        "success": False,
+                        "error_type": "QUOTA_EXCEEDED",
+                        "model_used": current_model,
+                        "message": f"⚠️ 현재 {current_model} 무료 요청 한도에 도달했습니다. 잠시 후 다시 시도하시거나 상단에서 다른 모델을 선택해 주세요."
+                    }
+                
+                # Handle 503 / 500 overloaded - retry or fallback
+                if response.status_code in (503, 500, 502, 504):
+                    last_status = response.status_code
+                    last_error_msg = "Google 서버 일시적 과부하 (High Demand)"
+                    import time
+                    time.sleep(1)
+                    continue
+                
+                if response.status_code != 200:
+                    err_data = {}
+                    try:
+                        err_data = response.json()
+                    except Exception:
+                        pass
+                    err_msg = err_data.get("error", {}).get("message", response.text)
+                    return {
+                        "success": False,
+                        "error_type": "API_ERROR",
+                        "message": f"Gemini API 오류 ({response.status_code}): {err_msg}"
+                    }
 
-        res_json = response.json()
-        candidates = res_json.get("candidates", [])
-        if not candidates:
-            return {
-                "success": False,
-                "error_type": "EMPTY_RESPONSE",
-                "message": "AI 응답을 생성하지 못했습니다."
-            }
+                res_json = response.json()
+                candidates = res_json.get("candidates", [])
+                if not candidates:
+                    return {
+                        "success": False,
+                        "error_type": "EMPTY_RESPONSE",
+                        "message": "AI 응답을 생성하지 못했습니다."
+                    }
 
-        reply_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        return {
-            "success": True,
-            "reply": reply_text,
-            "model_used": model_name
-        }
+                reply_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return {
+                    "success": True,
+                    "reply": reply_text,
+                    "model_used": current_model
+                }
 
-    except requests.exceptions.Timeout:
-        return {
-            "success": False,
-            "error_type": "TIMEOUT",
-            "message": "Gemini API 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error_type": "NETWORK_ERROR",
-            "message": f"통신 중 오류가 발생했습니다: {str(e)}"
-        }
+            except requests.exceptions.Timeout:
+                last_error_msg = "응답 시간 초과"
+                continue
+            except Exception as e:
+                last_error_msg = str(e)
+                continue
+
+    return {
+        "success": False,
+        "error_type": "SERVER_OVERLOADED",
+        "message": f"Google Gemini 서버가 현재 일시적인 트래픽 폭주(503 High Demand) 상태입니다. 잠시 후 다시 전송 버튼을 누르시면 정상 처리됩니다. (사유: {last_error_msg})"
+    }
