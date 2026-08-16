@@ -10,5 +10,7 @@ scikit-learn
 finance-datareader
 python-dotenv
 requests
+psycopg2-binary
+
 
 
