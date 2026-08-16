@@ -7,7 +7,7 @@ PyPortfolioOpt==1.5.5
 sqlalchemy==2.0.28
 pydantic==2.6.3
 scikit-learn
-FinanceDataReader
+finance-datareader
 python-dotenv
 requests
 
