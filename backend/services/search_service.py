@@ -16,33 +16,50 @@ def _background_load():
     
     try:
         temp_tickers = []
-        # Load KRX only
-        df_krx = fdr.StockListing('KRX')
-        for _, row in df_krx.iterrows():
-            code = str(row.get('Code', '') or row.get('Symbol', ''))
-            name = str(row.get('Name', ''))
-            market = str(row.get('Market', 'KOSPI'))
-            if market == 'KOSPI':
-                code += '.KS'
-            elif market == 'KOSDAQ':
-                code += '.KQ'
-            else:
-                code += '.KS'
-            temp_tickers.append({'symbol': code, 'name': name, 'market': 'KRX'})
+        # Load both KRX stocks and domestic ETFs
+        for m in ['KRX', 'ETF/KR']:
+            try:
+                df = fdr.StockListing(m)
+                for _, row in df.iterrows():
+                    code = str(row.get('Code', '') or row.get('Symbol', ''))
+                    name = str(row.get('Name', ''))
+                    market = str(row.get('Market', 'KOSPI'))
+                    if market == 'KOSDAQ':
+                        code += '.KQ'
+                    else:
+                        code += '.KS'
+                    temp_tickers.append({'symbol': code, 'name': name, 'market': m})
+            except Exception as sub_e:
+                print(f"SearchService: Warning loading {m}: {sub_e}")
 
         with _cache_lock:
             _cached_tickers = temp_tickers
             _loaded = True
-        print(f"SearchService: Loaded {len(_cached_tickers)} KRX symbols.")
+        print(f"SearchService: Loaded {len(_cached_tickers)} domestic symbols (KRX + ETF/KR).")
     except Exception as e:
-        print(f"SearchService: Warning loading KRX: {e}")
+        print(f"SearchService: Warning during background load: {e}")
     finally:
         with _cache_lock:
             _loading = False
 
-def ensure_cache_loaded():
-    if not _loaded and not _loading:
-        threading.Thread(target=_background_load, daemon=True).start()
+def ensure_cache_loaded(wait_for_completion=False):
+    global _loaded, _loading
+    if not _loaded:
+        if not _loading:
+            t = threading.Thread(target=_background_load, daemon=True)
+            t.start()
+            if wait_for_completion:
+                t.join(timeout=8)
+        elif wait_for_completion:
+            import time
+            for _ in range(30):
+                if _loaded:
+                    break
+                time.sleep(0.2)
+
+# Start background cache load immediately on import
+ensure_cache_loaded()
+
 
 
 def search_tickers(query: str, limit: int = 10):
@@ -105,6 +122,7 @@ def get_ticker_names(tickers):
     if not tickers:
         return {}
         
+    ensure_cache_loaded(wait_for_completion=True)
     result_names = {}
     
     with _cache_lock:
@@ -112,10 +130,17 @@ def get_ticker_names(tickers):
         
     for t in tickers:
         upper_t = t.upper()
+        # Strip suffix to try matching 6-digit code as well (e.g., '069500')
+        pure_code = upper_t.replace('.KS', '').replace('.KQ', '')
+        
         if t in krx_map:
             result_names[t] = krx_map[t]
         elif upper_t in krx_map:
             result_names[t] = krx_map[upper_t]
+        elif f"{pure_code}.KS" in krx_map:
+            result_names[t] = krx_map[f"{pure_code}.KS"]
+        elif f"{pure_code}.KQ" in krx_map:
+            result_names[t] = krx_map[f"{pure_code}.KQ"]
         elif t.endswith('.KS') or t.endswith('.KQ'):
             result_names[t] = krx_map.get(t, t)
         else:
@@ -123,4 +148,5 @@ def get_ticker_names(tickers):
             result_names[t] = t
 
     return result_names
+
 
