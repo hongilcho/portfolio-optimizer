@@ -14,38 +14,36 @@ def _background_load():
             return
         _loading = True
     
-    temp_tickers = []
-    
-    # 1. Load KRX and ETF/KR (Lightweight first)
-    for m in ['KRX', 'ETF/KR']:
-        try:
-            df_krx = fdr.StockListing(m)
-            for _, row in df_krx.iterrows():
-                code = str(row.get('Code', '') or row.get('Symbol', ''))
-                name = str(row.get('Name', ''))
-                market = str(row.get('Market', 'KOSPI'))
-                if market == 'KOSPI':
-                    code += '.KS'
-                elif market == 'KOSDAQ':
-                    code += '.KQ'
-                else:
-                    code += '.KS'
-                temp_tickers.append({'symbol': code, 'name': name, 'market': m})
-        except Exception as e:
-            print(f"SearchService: Warning loading {m}: {e}")
+    try:
+        temp_tickers = []
+        # Load KRX only
+        df_krx = fdr.StockListing('KRX')
+        for _, row in df_krx.iterrows():
+            code = str(row.get('Code', '') or row.get('Symbol', ''))
+            name = str(row.get('Name', ''))
+            market = str(row.get('Market', 'KOSPI'))
+            if market == 'KOSPI':
+                code += '.KS'
+            elif market == 'KOSDAQ':
+                code += '.KQ'
+            else:
+                code += '.KS'
+            temp_tickers.append({'symbol': code, 'name': name, 'market': 'KRX'})
 
-    with _cache_lock:
-        _cached_tickers = temp_tickers
-        _loaded = True
-        _loading = False
-    print(f"SearchService: Lightweight cache loaded with {len(_cached_tickers)} KRX symbols.")
+        with _cache_lock:
+            _cached_tickers = temp_tickers
+            _loaded = True
+        print(f"SearchService: Loaded {len(_cached_tickers)} KRX symbols.")
+    except Exception as e:
+        print(f"SearchService: Warning loading KRX: {e}")
+    finally:
+        with _cache_lock:
+            _loading = False
 
 def ensure_cache_loaded():
     if not _loaded and not _loading:
         threading.Thread(target=_background_load, daemon=True).start()
 
-# Start lightweight background loading on startup
-ensure_cache_loaded()
 
 def search_tickers(query: str, limit: int = 10):
     query_str = query.strip()
