@@ -287,6 +287,9 @@ def analyze(request: schemas.BaseRequest):
             covariance_matrix=cov_krw
         )
         
+        import gc
+        gc.collect()
+        
         return schemas.DualAnalyzeResponse(
             dates=dates_usd,
             usd=usd_res,
@@ -298,6 +301,7 @@ def analyze(request: schemas.BaseRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
 
 @app.post("/optimize", response_model=schemas.OptimizationResponse)
 def optimize(request: schemas.OptimizationRequest):

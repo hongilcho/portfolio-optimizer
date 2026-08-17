@@ -136,12 +136,13 @@ def get_portfolio_coverage(tickers: List[str], proxies: Dict[str, str] = None) -
 
     all_symbols = list(set(tickers + [p for p in proxies.values() if p]))
     try:
-        raw = yf.download(all_symbols, period="max", progress=False)
+        raw = _download_with_cache(all_symbols, period="max")
         if isinstance(raw.columns, pd.MultiIndex):
             col_name = "Adj Close" if "Adj Close" in raw.columns.get_level_values(0) else "Close"
             data = raw[col_name]
         else:
             data = raw
+
 
         coverage_details = {}
         effective_starts = {}
@@ -210,6 +211,49 @@ def get_portfolio_coverage(tickers: List[str], proxies: Dict[str, str] = None) -
         traceback.print_exc()
         return {"tickers": {}, "error": str(e)}
 
+import time
+
+# Thread-safe in-memory cache to prevent concurrent duplicate downloads and reduce RAM
+_price_cache = {}
+_cache_ttl_seconds = 3600  # 1 hour cache
+
+def _get_cache_key(symbols: List[str], period: str) -> str:
+    return f"{','.join(sorted(symbols))}_{period}"
+
+def _download_with_cache(symbols: List[str], period: str) -> pd.DataFrame:
+    key = _get_cache_key(symbols, period)
+    now = time.time()
+    if key in _price_cache:
+        cached_time, cached_df = _price_cache[key]
+        if now - cached_time < _cache_ttl_seconds:
+            return cached_df.copy()
+
+    data = pd.DataFrame()
+    for attempt in range(3):
+        try:
+            data = yf.download(
+                symbols, 
+                period=period, 
+                progress=False, 
+                auto_adjust=False,
+                timeout=25
+            )
+            if not data.empty:
+                break
+            time.sleep(1)
+        except Exception as err:
+            print(f"yfinance download attempt {attempt+1} failed: {err}")
+            time.sleep(1.5)
+
+    if not data.empty:
+        # Keep cache size small: retain at most 15 most recent entries
+        if len(_price_cache) > 15:
+            oldest_k = min(_price_cache.keys(), key=lambda k: _price_cache[k][0])
+            del _price_cache[oldest_k]
+        _price_cache[key] = (now, data.copy())
+
+    return data
+
 def fetch_historical_data(tickers: List[str], period: str = "5y", proxies: Dict[str, str] = None) -> pd.DataFrame:
     """
     Fetch historical adjusted closing prices for the given tickers.
@@ -223,25 +267,8 @@ def fetch_historical_data(tickers: List[str], period: str = "5y", proxies: Dict[
 
     all_tickers_to_fetch = list(set(tickers + [p for p in proxies.values() if p]))
     
-    data = pd.DataFrame()
-    # Try download with retry for cloud environment resilience
-    for attempt in range(3):
-        try:
-            data = yf.download(
-                all_tickers_to_fetch, 
-                period=period, 
-                progress=False, 
-                auto_adjust=False,
-                timeout=25
-            )
-            if not data.empty:
-                break
-            import time
-            time.sleep(1)
-        except Exception as err:
-            print(f"yfinance download attempt {attempt+1} failed: {err}")
-            import time
-            time.sleep(1.5)
+    data = _download_with_cache(all_tickers_to_fetch, period=period)
+
 
     try:
         if data.empty:
