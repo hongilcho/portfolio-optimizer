@@ -223,10 +223,32 @@ def fetch_historical_data(tickers: List[str], period: str = "5y", proxies: Dict[
 
     all_tickers_to_fetch = list(set(tickers + [p for p in proxies.values() if p]))
     
+    data = pd.DataFrame()
+    # Try download with retry for cloud environment resilience
+    for attempt in range(3):
+        try:
+            data = yf.download(
+                all_tickers_to_fetch, 
+                period=period, 
+                progress=False, 
+                auto_adjust=False,
+                timeout=25
+            )
+            if not data.empty:
+                break
+            import time
+            time.sleep(1)
+        except Exception as err:
+            print(f"yfinance download attempt {attempt+1} failed: {err}")
+            import time
+            time.sleep(1.5)
+
     try:
-        data = yf.download(all_tickers_to_fetch, period=period, progress=False)
-        
-        # yfinance changed its API, so we extract 'Close' or 'Adj Close'
+        if data.empty:
+            print(f"Warning: No data returned from yfinance for {all_tickers_to_fetch}")
+            return pd.DataFrame()
+
+        # Extract 'Close' or 'Adj Close'
         if isinstance(data.columns, pd.MultiIndex):
             if "Adj Close" in data.columns.get_level_values(0):
                 data = data["Adj Close"].copy()
